@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Soul Spec v0.4",
+  "type": "object",
+  "required": ["name", "version", "specVersion", "description"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Soul package name (lowercase, hyphens only)"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version"
+    },
+    "specVersion": {
+      "type": "string",
+      "enum": ["0.3", "0.4"],
+      "description": "Soul Spec version"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "author": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "github": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "license": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "category": {
+      "type": "string"
+    },
+    "files": {
+      "type": "object",
+      "properties": {
+        "soul": { "type": "string", "description": "Path to SOUL.md" },
+        "identity": { "type": "string", "description": "Path to IDENTITY.md" }
+      },
+      "required": ["soul"]
+    }
+  }
+}

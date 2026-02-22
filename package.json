@@ -1,0 +1,109 @@
+{
+  "name": "soul-spec",
+  "displayName": "Soul Spec — AI Persona Manager",
+  "description": "Browse, install, and manage AI persona packages (Soul Spec) for any LLM framework",
+  "version": "0.1.0",
+  "publisher": "clawsouls",
+  "icon": "resources/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Snippets",
+    "Linters"
+  ],
+  "keywords": [
+    "AI",
+    "persona",
+    "soul",
+    "SOUL.md",
+    "agent",
+    "Claude",
+    "ChatGPT",
+    "Cursor",
+    "Windsurf"
+  ],
+  "activationEvents": [
+    "onView:soulSpecBrowser"
+  ],
+  "main": "./out/extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawsouls/vscode-soul-spec"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "soul-spec",
+          "title": "Soul Spec",
+          "icon": "resources/soul-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "soul-spec": [
+        {
+          "id": "soulSpecBrowser",
+          "name": "Soul Browser"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "soulSpec.install",
+        "title": "Soul Spec: Install Soul"
+      },
+      {
+        "command": "soulSpec.init",
+        "title": "Soul Spec: Init"
+      },
+      {
+        "command": "soulSpec.export",
+        "title": "Soul Spec: Export for..."
+      },
+      {
+        "command": "soulSpec.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "soulSpec.search",
+        "title": "Search",
+        "icon": "$(search)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "soulSpec.refresh",
+          "when": "view == soulSpecBrowser",
+          "group": "navigation"
+        },
+        {
+          "command": "soulSpec.search",
+          "when": "view == soulSpecBrowser",
+          "group": "navigation"
+        }
+      ]
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": "soul.json",
+        "url": "./resources/soul-spec-schema.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}
