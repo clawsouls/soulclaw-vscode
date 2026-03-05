@@ -12,7 +12,7 @@ export async function setupWizard(): Promise<void> {
 	);
 
 	let currentStep = 1;
-	const maxSteps = 4;
+	const maxSteps = 5;
 
 	panel.webview.onDidReceiveMessage(async (message) => {
 		switch (message.type) {
@@ -52,6 +52,13 @@ async function handleNextStep(panel: vscode.WebviewPanel, data: any, step: numbe
 			}
 			break;
 		case 3:
+			// Save gateway port
+			if (data.port) {
+				const url = `ws://127.0.0.1:${data.port}`;
+				await config.update('gatewayUrl', url, vscode.ConfigurationTarget.Global);
+			}
+			break;
+		case 4:
 			// Handle soul selection
 			if (data.soulChoice === 'custom') {
 				await createCustomSoul(data.soulName);
@@ -134,8 +141,10 @@ function getWebviewContent(step: number): string {
 		case 2:
 			return getStep2Html();
 		case 3:
-			return getStep3Html();
+			return getStepPortHtml();
 		case 4:
+			return getStep3Html();
+		case 5:
 			return getStep4Html();
 		default:
 			return getStep1Html();
@@ -189,7 +198,7 @@ function getStep1Html(): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🔮 Welcome to ClawSouls Agent</h1>
-					<p>Step 1 of 4: Choose your LLM provider</p>
+					<p>Step 1 of 5: Choose your LLM provider</p>
 				</div>
 				
 				<div class="provider-card" data-provider="anthropic">
@@ -285,7 +294,7 @@ function getStep2Html(): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🔑 Authentication</h1>
-					<p>Step 2 of 4: Set up your API access</p>
+					<p>Step 2 of 5: Set up your API access</p>
 				</div>
 				
 				<div class="auth-option">
@@ -312,6 +321,85 @@ function getStep2Html(): string {
 					});
 				}
 				
+				function back() {
+					vscode.postMessage({ type: 'back' });
+				}
+			</script>
+		</body>
+		</html>
+	`;
+}
+
+function getStepPortHtml(): string {
+	return `
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<meta charset="UTF-8">
+			<title>ClawSouls Setup - Step 3</title>
+			<style>
+				body { font-family: var(--vscode-font-family); padding: 20px; }
+				.container { max-width: 600px; margin: 0 auto; }
+				.step-header { text-align: center; margin-bottom: 30px; }
+				.port-section {
+					border: 1px solid var(--vscode-input-border);
+					border-radius: 8px;
+					padding: 20px;
+					margin: 15px 0;
+				}
+				input[type="number"] {
+					width: 200px;
+					padding: 8px;
+					border: 1px solid var(--vscode-input-border);
+					background: var(--vscode-input-background);
+					color: var(--vscode-input-foreground);
+					border-radius: 4px;
+					font-size: 16px;
+				}
+				.hint { color: var(--vscode-descriptionForeground); font-size: 12px; margin-top: 8px; }
+				.buttons { text-align: center; margin-top: 30px; }
+				button {
+					margin: 0 10px;
+					padding: 10px 20px;
+					border: none;
+					background: var(--vscode-button-background);
+					color: var(--vscode-button-foreground);
+					border-radius: 4px;
+					cursor: pointer;
+				}
+			</style>
+		</head>
+		<body>
+			<div class="container">
+				<div class="step-header">
+					<h1>🔌 Gateway Port</h1>
+					<p>Step 3 of 5: Configure the OpenClaw Gateway connection</p>
+				</div>
+
+				<div class="port-section">
+					<h3>Gateway Port</h3>
+					<p>The extension connects to OpenClaw Gateway via WebSocket.</p>
+					<input type="number" id="portInput" value="18789" min="1024" max="65535" />
+					<div class="hint">Default: 18789. Change if you have multiple instances or a conflict.</div>
+				</div>
+
+				<div class="buttons">
+					<button onclick="back()">← Back</button>
+					<button onclick="next()">Next →</button>
+				</div>
+			</div>
+
+			<script>
+				const vscode = acquireVsCodeApi();
+
+				function next() {
+					const port = document.getElementById('portInput').value;
+					vscode.postMessage({
+						type: 'next',
+						data: { port: port }
+					});
+				}
+
 				function back() {
 					vscode.postMessage({ type: 'back' });
 				}
@@ -373,7 +461,7 @@ function getStep3Html(): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🎭 Choose Your Soul</h1>
-					<p>Step 3 of 4: Select an AI persona</p>
+					<p>Step 4 of 5: Select an AI persona</p>
 				</div>
 				
 				<div class="soul-card" data-choice="brad">
