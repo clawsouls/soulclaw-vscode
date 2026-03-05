@@ -5,8 +5,10 @@ import { SoulExplorerProvider } from './ui/soulExplorer';
 import { StatusBarManager } from './ui/statusBar';
 import { WorkspaceTracker } from './context/workspaceTracker';
 import { setupWizard } from './commands/setup';
+import { GatewayLauncher } from './gateway/launcher';
 
 export let gatewayConnection: GatewayConnection;
+export let gatewayLauncher: GatewayLauncher;
 export let chatPanel: ChatPanel;
 export let workspaceTracker: WorkspaceTracker;
 export let outputChannel: vscode.OutputChannel;
@@ -24,6 +26,10 @@ export async function activate(context: vscode.ExtensionContext) {
 			if (gatewayConnection?.currentState === 'connected' || gatewayConnection?.currentState === 'connecting') {
 				gatewayConnection.disconnect();
 				outputChannel.appendLine('Gateway disconnected for setup');
+			}
+			if (gatewayLauncher?.isRunning()) {
+				gatewayLauncher.stop();
+				outputChannel.appendLine('Gateway process stopped for setup');
 			}
 			return setupWizard();
 		}),
@@ -59,9 +65,12 @@ export async function activate(context: vscode.ExtensionContext) {
 			treeDataProvider: soulExplorerProvider
 		});
 
-		// Auto-connect if enabled
+		// Auto-launch and connect
 		const config = vscode.workspace.getConfiguration('clawsouls');
 		if (config.get('autoConnect', true)) {
+			gatewayLauncher = new GatewayLauncher(context);
+			outputChannel.appendLine('Ensuring Gateway is running...');
+			await gatewayLauncher.ensureRunning();
 			outputChannel.appendLine('Connecting to Gateway...');
 			await gatewayConnection.connect();
 		}
@@ -83,6 +92,9 @@ export async function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
 	console.log('ClawSouls Agent deactivated');
 	
+	if (gatewayLauncher) {
+		gatewayLauncher.stop();
+	}
 	if (gatewayConnection) {
 		gatewayConnection.disconnect();
 	}
