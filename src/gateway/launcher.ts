@@ -246,16 +246,24 @@ export class GatewayLauncher {
 
 			const cmd = nodePath;
 			const args = jsEntry
-				? [jsEntry, 'gateway', '--port', String(this.port), '--allow-unconfigured']
-				: [openclawBin, 'gateway', '--port', String(this.port), '--allow-unconfigured'];
+				? [jsEntry, 'gateway', '--port', String(this.port), '--allow-unconfigured', '--dev']
+				: [openclawBin, 'gateway', '--port', String(this.port), '--allow-unconfigured', '--dev'];
 
 			outputChannel.appendLine(`Exec: ${cmd} ${args.join(' ')}`);
 
 			this.process = spawn(cmd, args, {
-				stdio: ['ignore', 'pipe', 'pipe'],
+				stdio: ['pipe', 'pipe', 'pipe'],
 				detached: false,
-				env: { ...process.env }
+				env: {
+					...process.env,
+					NO_COLOR: '1',
+					CI: '1',
+					OPENCLAW_NON_INTERACTIVE: '1'
+				}
 			});
+
+			// Close stdin immediately to prevent interactive prompts from blocking
+			this.process.stdin?.end();
 
 			let started = false;
 
