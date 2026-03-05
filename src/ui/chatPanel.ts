@@ -111,12 +111,23 @@ export class ChatPanel {
 				sessionKey: this.gateway.sessionKey,
 				limit: 10
 			});
+			// Debug: log raw history response
+			const { outputChannel } = require('../extension');
+			outputChannel?.appendLine(`chat.history response keys: ${JSON.stringify(Object.keys(history || {}))}`);
+			
 			const messages = history?.messages;
+			outputChannel?.appendLine(`messages count: ${Array.isArray(messages) ? messages.length : 'not array'}`);
+			
 			if (Array.isArray(messages) && messages.length > 0) {
+				const last = messages[messages.length - 1];
+				outputChannel?.appendLine(`last msg: role=${last?.role} content_type=${typeof last?.content} content=${JSON.stringify(last?.content)?.slice(0, 200)}`);
+				
 				// Find last assistant message
 				for (let i = messages.length - 1; i >= 0; i--) {
-					if (messages[i].role === 'assistant') {
-						const text = this.extractText(messages[i]);
+					const msg = messages[i];
+					if (msg.role === 'assistant') {
+						const text = this.extractText(msg);
+						outputChannel?.appendLine(`extractText result: ${text?.slice(0, 100) || 'null'}`);
 						if (text) {
 							this.addMessage('assistant', text);
 							return;
@@ -126,7 +137,9 @@ export class ChatPanel {
 			}
 			this.addMessage('assistant', '(no response)');
 		} catch (err: any) {
-			this.addMessage('assistant', `(failed to fetch response: ${err.message})`);
+			const { outputChannel } = require('../extension');
+			outputChannel?.appendLine(`chat.history error: ${err.message}`);
+			this.addMessage('assistant', `(failed to fetch: ${err.message})`);
 		}
 	}
 
