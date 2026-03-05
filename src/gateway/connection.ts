@@ -32,6 +32,12 @@ export class GatewayConnection {
 		return this.state;
 	}
 	
+	private token: string = '';
+
+	public setToken(token: string): void {
+		this.token = token;
+	}
+
 	public async connect(): Promise<void> {
 		if (this.state === 'connecting' || this.state === 'connected') {
 			return;
@@ -40,10 +46,11 @@ export class GatewayConnection {
 		this.setState('connecting');
 		
 		try {
-			// First try to detect existing OpenClaw gateway
-			const gatewayUrl = vscode.workspace.getConfiguration('clawsouls').get('gatewayUrl', 'ws://127.0.0.1:18789');
+			const baseUrl = vscode.workspace.getConfiguration('clawsouls').get('gatewayUrl', 'ws://127.0.0.1:18789');
+			const sep = baseUrl.includes('?') ? '&' : '?';
+			const gatewayUrl = this.token ? `${baseUrl}${sep}auth=${this.token}` : baseUrl;
 			
-			console.log(`Connecting to OpenClaw Gateway at ${gatewayUrl}`);
+			console.log(`Connecting to OpenClaw Gateway at ${baseUrl}`);
 			
 			this.ws = new WebSocket(gatewayUrl);
 			

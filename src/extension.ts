@@ -71,6 +71,10 @@ export async function activate(context: vscode.ExtensionContext) {
 			gatewayLauncher = new GatewayLauncher(context);
 			outputChannel.appendLine('Ensuring Gateway is running...');
 			await gatewayLauncher.ensureRunning();
+			// Pass the auto-generated token to the connection
+			if (gatewayLauncher.gatewayToken) {
+				gatewayConnection.setToken(gatewayLauncher.gatewayToken);
+			}
 			outputChannel.appendLine('Connecting to Gateway...');
 			await gatewayConnection.connect();
 		}
