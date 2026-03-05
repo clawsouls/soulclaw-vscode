@@ -259,15 +259,17 @@ export class GatewayLauncher {
 
 			outputChannel.appendLine(`Exec: ${cmd} ${args.join(' ')}`);
 
-			// Pass LLM API key from extension settings as env var
+			// Contained architecture: redirect OpenClaw state dir to globalStorage
 			const config = vscode.workspace.getConfiguration('clawsouls');
 			const llmProvider = config.get<string>('llmProvider', 'anthropic');
 			const llmApiKey = config.get<string>('llmApiKey', '');
+			const stateDir = path.join(this.storagePath, 'openclaw-state');
 			const envVars: Record<string, string> = {
 				...process.env as Record<string, string>,
 				NO_COLOR: '1',
 				CI: '1',
-				OPENCLAW_NON_INTERACTIVE: '1'
+				OPENCLAW_NON_INTERACTIVE: '1',
+				OPENCLAW_STATE_DIR: stateDir
 			};
 			if (llmApiKey) {
 				if (llmProvider === 'openai') {
@@ -275,6 +277,10 @@ export class GatewayLauncher {
 				} else {
 					envVars['ANTHROPIC_API_KEY'] = llmApiKey;
 				}
+			}
+			// Ensure state dir exists
+			if (!fs.existsSync(stateDir)) {
+				fs.mkdirSync(stateDir, { recursive: true });
 			}
 
 			this.process = spawn(cmd, args, {
