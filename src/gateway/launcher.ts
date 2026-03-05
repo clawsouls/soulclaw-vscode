@@ -318,11 +318,15 @@ export class GatewayLauncher {
 				}
 			}
 
-			// Write minimal openclaw.json config if not exists
+			// Write openclaw.json config (always rewrite to pick up settings changes)
 			const configPath = path.join(stateDir, 'openclaw.json');
-			if (!fs.existsSync(configPath)) {
+			{
 				const provider = llmProvider === 'openai' ? 'openai' : 'anthropic';
-				const model = llmProvider === 'openai' ? 'openai/gpt-4o' : 'anthropic/claude-sonnet-4-20250514';
+				const userModel = config.get<string>('llmModel', '').trim();
+				const defaultModel = llmProvider === 'openai' ? 'openai/gpt-4o' : 'anthropic/claude-sonnet-4-20250514';
+				const model = userModel 
+					? (userModel.includes('/') ? userModel : `${provider}/${userModel}`)
+					: defaultModel;
 				const ollamaUrl = config.get<string>('ollamaUrl', 'http://127.0.0.1:11434');
 				const ollamaModel = config.get<string>('ollamaModel', 'llama3');
 				
