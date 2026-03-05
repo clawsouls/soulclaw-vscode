@@ -89,11 +89,10 @@ export class ChatPanel {
 					this.updateStreamingMessage();
 				}
 			} else if (state === 'final') {
-				// Final message — fetch full history or use accumulated stream
-				const finalText = this.streamBuffer || this.extractText(payload.message) || '(no response)';
+				// Final — fetch full chat history to get the actual response
 				this.streamBuffer = '';
 				this.currentRunId = null;
-				this.addMessage('assistant', finalText);
+				this.fetchLatestResponse();
 			} else if (state === 'error') {
 				this.streamBuffer = '';
 				this.currentRunId = null;
@@ -103,6 +102,31 @@ export class ChatPanel {
 				this.currentRunId = null;
 				this.addMessage('assistant', '(aborted)');
 			}
+		}
+	}
+
+	private async fetchLatestResponse(): Promise<void> {
+		try {
+			const history = await this.gateway.requestRPC('chat.history', {
+				sessionKey: this.gateway.sessionKey,
+				limit: 10
+			});
+			const messages = history?.messages;
+			if (Array.isArray(messages) && messages.length > 0) {
+				// Find last assistant message
+				for (let i = messages.length - 1; i >= 0; i--) {
+					if (messages[i].role === 'assistant') {
+						const text = this.extractText(messages[i]);
+						if (text) {
+							this.addMessage('assistant', text);
+							return;
+						}
+					}
+				}
+			}
+			this.addMessage('assistant', '(no response)');
+		} catch (err: any) {
+			this.addMessage('assistant', `(failed to fetch response: ${err.message})`);
 		}
 	}
 

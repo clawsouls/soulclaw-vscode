@@ -228,6 +228,11 @@ export class GatewayConnection {
 		}
 	}
 
+	/** Generic RPC request */
+	public async requestRPC(method: string, params?: any): Promise<any> {
+		return this.request(method, params);
+	}
+
 	/** Send a chat message to the gateway */
 	public async sendChat(text: string, sessionKey?: string): Promise<any> {
 		const key = sessionKey || this._sessionKey;
