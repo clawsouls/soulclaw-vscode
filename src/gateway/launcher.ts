@@ -330,7 +330,20 @@ export class GatewayLauncher {
 				const ollamaUrl = config.get<string>('ollamaUrl', 'http://127.0.0.1:11434');
 				const ollamaModel = config.get<string>('ollamaModel', 'llama3');
 				
+				const primaryModel = llmProvider === 'ollama' 
+					? `ollama/${ollamaModel}` 
+					: model;
 				const openclawConfig: any = {
+					meta: {
+						lastTouchedVersion: OPENCLAW_VERSION,
+						lastTouchedAt: new Date().toISOString()
+					},
+					wizard: {
+						lastRunAt: new Date().toISOString(),
+						lastRunVersion: OPENCLAW_VERSION,
+						lastRunCommand: 'onboard',
+						lastRunMode: 'local'
+					},
 					auth: {
 						profiles: {
 							[`${provider}:default`]: {
@@ -342,11 +355,10 @@ export class GatewayLauncher {
 					agents: {
 						defaults: {
 							model: {
-								primary: llmProvider === 'ollama' 
-									? `ollama/${ollamaModel}` 
-									: model,
+								primary: primaryModel,
 								fallbacks: []
-							}
+							},
+							maxConcurrent: 4
 						}
 					}
 				};
