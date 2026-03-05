@@ -38,32 +38,32 @@ export async function setupWizard(): Promise<void> {
 }
 
 async function handleNextStep(panel: vscode.WebviewPanel, data: any, step: number): Promise<void> {
-	const config = vscode.workspace.getConfiguration('clawsouls');
+	try {
+		const config = vscode.workspace.getConfiguration('clawsouls');
 
-	switch (step) {
-		case 1:
-			// Save LLM provider choice
-			await config.update('llmProvider', data.provider, vscode.ConfigurationTarget.Global);
-			break;
-		case 2:
-			// Save API key or handle OAuth
-			if (data.apiKey) {
-				await config.update('llmApiKey', data.apiKey, vscode.ConfigurationTarget.Global);
-			}
-			break;
-		case 3:
-			// Save gateway port
-			if (data.port) {
-				const url = `ws://127.0.0.1:${data.port}`;
-				await config.update('gatewayUrl', url, vscode.ConfigurationTarget.Global);
-			}
-			break;
-		case 4:
-			// Handle soul selection
-			if (data.soulChoice === 'custom') {
-				await createCustomSoul(data.soulName);
-			}
-			break;
+		switch (step) {
+			case 1:
+				await config.update('llmProvider', data.provider, vscode.ConfigurationTarget.Global);
+				break;
+			case 2:
+				if (data.apiKey) {
+					await config.update('llmApiKey', data.apiKey, vscode.ConfigurationTarget.Global);
+				}
+				break;
+			case 3:
+				if (data.port) {
+					const url = `ws://127.0.0.1:${data.port}`;
+					await config.update('gatewayUrl', url, vscode.ConfigurationTarget.Global);
+				}
+				break;
+			case 4:
+				if (data.soulChoice === 'custom') {
+					await createCustomSoul(data.soulName);
+				}
+				break;
+		}
+	} catch (err) {
+		console.error(`Setup step ${step} error:`, err);
 	}
 
 	updateWebviewContent(panel, step + 1);

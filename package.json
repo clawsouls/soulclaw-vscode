@@ -167,6 +167,18 @@
             "ollama"
           ],
           "description": "LLM provider"
+        },
+        "clawsouls.llmApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the selected LLM provider",
+          "order": 2
+        },
+        "clawsouls.gatewayPort": {
+          "type": "number",
+          "default": 18789,
+          "description": "Gateway WebSocket port",
+          "order": 3
         }
       }
     }
