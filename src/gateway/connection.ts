@@ -1,6 +1,14 @@
 import * as vscode from 'vscode';
 import * as WebSocket from 'ws';
 
+function log(msg: string) {
+	try {
+		const { outputChannel } = require('../extension');
+		outputChannel?.appendLine(msg);
+	} catch {}
+	console.log(msg);
+}
+
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'error' | 'disconnected';
 
 export interface GatewayMessage {
@@ -50,13 +58,12 @@ export class GatewayConnection {
 			const sep = baseUrl.includes('?') ? '&' : '?';
 			const gatewayUrl = this.token ? `${baseUrl}${sep}auth=${this.token}` : baseUrl;
 			
-			const { outputChannel } = await import('../extension');
-			outputChannel?.appendLine(`WS connecting to: ${baseUrl} (token: ${this.token ? 'yes' : 'no'})`);
+			log(`WS connecting to: ${baseUrl} (token: ${this.token ? 'yes' : 'no'})`);
 			
 			this.ws = new WebSocket(gatewayUrl);
 			
 			this.ws.on('open', () => {
-				outputChannel?.appendLine('WebSocket connected!');
+				log('WebSocket connected!');
 				this.setState('connected');
 				this.startPing();
 				
@@ -80,21 +87,21 @@ export class GatewayConnection {
 			});
 			
 			this.ws.on('close', (code: number, reason: Buffer) => {
-				outputChannel?.appendLine(`WebSocket closed: code=${code} reason=${reason?.toString()}`);
+				log(`WebSocket closed: code=${code} reason=${reason?.toString()}`);
 				this.setState('disconnected');
 				this.stopPing();
 				this.scheduleReconnect();
 			});
 			
 			this.ws.on('error', (error: Error) => {
-				outputChannel?.appendLine(`WebSocket error: ${error.message}`);
+				log(`WebSocket error: ${error.message}`);
 				this.setState('error');
 				this.stopPing();
 				this.scheduleReconnect();
 			});
 			
-		} catch (error) {
-			console.error('Failed to connect to Gateway:', error);
+		} catch (error: any) {
+			log(`Failed to connect to Gateway: ${error?.message || error}`);
 			this.setState('error');
 			this.scheduleReconnect();
 		}
