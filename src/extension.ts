@@ -20,7 +20,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Register ALL commands first — before anything that might throw
 	context.subscriptions.push(
-		vscode.commands.registerCommand('clawsouls.setup', () => setupWizard()),
+		vscode.commands.registerCommand('clawsouls.setup', () => {
+			if (gatewayConnection?.currentState === 'connected' || gatewayConnection?.currentState === 'connecting') {
+				gatewayConnection.disconnect();
+				outputChannel.appendLine('Gateway disconnected for setup');
+			}
+			return setupWizard();
+		}),
 		vscode.commands.registerCommand('clawsouls.openChat', () => chatPanel?.show()),
 		vscode.commands.registerCommand('clawsouls.restartGateway', () => gatewayConnection?.restart()),
 		vscode.commands.registerCommand('clawsouls.refresh', () => {}),

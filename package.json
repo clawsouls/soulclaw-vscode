@@ -191,7 +191,21 @@
           "description": "Ollama model name"
         }
       }
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "clawsouls.soulExplorer",
+        "contents": "No soul detected in this workspace.\n[Run Setup](command:clawsouls.setup)\n[Open Chat](command:clawsouls.openChat)"
+      },
+      {
+        "view": "clawsouls.swarm",
+        "contents": "Swarm not initialized.\n[Run Setup](command:clawsouls.setup)"
+      },
+      {
+        "view": "clawsouls.checkpoints",
+        "contents": "No checkpoints found.\n[Run Setup](command:clawsouls.setup)"
+      }
+    ]
   },
   "scripts": {
     "build": "node esbuild.mjs",

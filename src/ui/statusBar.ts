@@ -6,6 +6,7 @@ export class StatusBarManager {
 	private agentStatusItem: vscode.StatusBarItem;
 	private connectionStatusItem: vscode.StatusBarItem;
 	private restartItem: vscode.StatusBarItem;
+	private setupItem: vscode.StatusBarItem;
 	
 	constructor(
 		private context: vscode.ExtensionContext,
@@ -16,6 +17,7 @@ export class StatusBarManager {
 		this.agentStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
 		this.connectionStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
 		this.restartItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
+		this.setupItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
 		
 		this.setupStatusItems();
 		this.updateStatusBar();
@@ -27,7 +29,8 @@ export class StatusBarManager {
 			this.soulStatusItem,
 			this.agentStatusItem,
 			this.connectionStatusItem,
-			this.restartItem
+			this.restartItem,
+			this.setupItem
 		);
 	}
 	
@@ -47,6 +50,11 @@ export class StatusBarManager {
 		this.restartItem.text = '🔄';
 		this.restartItem.command = 'clawsouls.restartGateway';
 		this.restartItem.tooltip = 'Restart OpenClaw Gateway';
+
+		// Setup button
+		this.setupItem.text = '⚙️ Setup';
+		this.setupItem.command = 'clawsouls.setup';
+		this.setupItem.tooltip = 'Open ClawSouls Setup Wizard';
 		
 		// Show all items
 		const config = vscode.workspace.getConfiguration('clawsouls');
@@ -55,6 +63,7 @@ export class StatusBarManager {
 			this.agentStatusItem.show();
 			this.connectionStatusItem.show();
 			this.restartItem.show();
+			this.setupItem.show();
 		}
 	}
 	
