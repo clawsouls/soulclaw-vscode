@@ -305,13 +305,13 @@ export class GatewayLauncher {
 				if (!started) resolve(false);
 			});
 
-			// Timeout — try connecting anyway
+			// Timeout — try connecting anyway (30s for first-time startup)
 			setTimeout(() => {
 				if (!started) {
 					outputChannel.appendLine('Gateway start timeout — attempting connection');
 					resolve(true);
 				}
-			}, 8000);
+			}, 30000);
 		});
 	}
 
