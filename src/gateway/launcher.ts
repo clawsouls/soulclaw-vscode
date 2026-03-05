@@ -365,8 +365,15 @@ export class GatewayLauncher {
 				
 				if (llmProvider === 'ollama') {
 					openclawConfig.agents.defaults.model.primary = `ollama/${ollamaModel}`;
-					openclawConfig.providers = {
-						ollama: { baseUrl: ollamaUrl }
+					openclawConfig.models = {
+						providers: {
+							ollama: {
+								baseUrl: `${ollamaUrl}/v1`,
+								apiKey: 'dummy',
+								api: 'openai-completions',
+								models: [{ id: `${ollamaModel}:latest`, name: ollamaModel }]
+							}
+						}
 					};
 				}
 				
