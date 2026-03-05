@@ -12,7 +12,7 @@ export class ChatPanel {
 		private gateway: GatewayConnection
 	) {
 		// Listen for Gateway messages
-		this.gateway.onMessage.listen(this.handleGatewayMessage.bind(this));
+		this.gateway.onMessage(this.handleGatewayMessage.bind(this));
 	}
 	
 	public show(): void {

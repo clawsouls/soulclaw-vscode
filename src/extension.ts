@@ -18,6 +18,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	outputChannel.appendLine('ClawSouls Agent v0.1.0 activated');
 	console.log('ClawSouls Agent activated');
 
+	try {
+
 	// Initialize workspace tracker
 	workspaceTracker = new WorkspaceTracker(context);
 	
@@ -85,6 +87,11 @@ export async function activate(context: vscode.ExtensionContext) {
 			outputChannel.appendLine(`Setup wizard error: ${err}`);
 		}
 		context.globalState.update('hasSetup', true);
+	}
+
+	} catch (err) {
+		outputChannel.appendLine(`Activation error: ${err}`);
+		console.error('ClawSouls Agent activation error:', err);
 	}
 }
 

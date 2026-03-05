@@ -21,7 +21,7 @@ export class StatusBarManager {
 		this.updateStatusBar();
 		
 		// Listen for connection state changes
-		this.gateway.onStateChanged.listen(this.onConnectionStateChanged.bind(this));
+		this.gateway.onStateChanged(this.onConnectionStateChanged.bind(this));
 		
 		context.subscriptions.push(
 			this.soulStatusItem,
