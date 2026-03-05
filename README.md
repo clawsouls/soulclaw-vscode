@@ -37,7 +37,7 @@ nvm install 24 64
 nvm use 24.13.0
 ```
 
-> ⚠️ **Windows ARM64 users**: Node.js 24 doesn't have official ARM64 builds yet. Use `nvm install 24 64` to install the x64 version (runs via emulation).
+> ⚠️ **Windows**: If `nvm install 24` fails with "version not available", specify the architecture explicitly: `nvm install 24 64`
 
 ### Verify
 
