@@ -215,28 +215,45 @@ export class GatewayLauncher {
 		return new Promise((resolve) => {
 			outputChannel.appendLine(`Starting Gateway on port ${this.port}...`);
 
-			// Run openclaw via the specific Node binary to ensure correct version
-			// openclawBin is a JS script, run it with: node <openclawBin> gateway start --port ...
-			const openclawScript = openclawBin.replace(/\.cmd$/, '');
-			const isWin = process.platform === 'win32';
-
-			// On Windows, .cmd files are shell scripts. Use node directly with the JS entry point.
+			// Always use the specific Node binary to run OpenClaw
+			// This avoids .cmd files picking up the wrong system Node
 			const openclawDir = path.join(this.storagePath, 'openclaw');
-			const jsEntry = path.join(openclawDir, 'node_modules', 'openclaw', 'dist', 'cli.mjs');
-			const entryPoint = fs.existsSync(jsEntry) ? jsEntry : openclawBin;
-			const useNodeDirect = fs.existsSync(jsEntry);
+			const candidates = [
+				path.join(openclawDir, 'node_modules', 'openclaw', 'openclaw.mjs'),
+				path.join(openclawDir, 'node_modules', 'openclaw', 'dist', 'cli.mjs'),
+				path.join(openclawDir, 'node_modules', 'openclaw', 'dist', 'index.mjs'),
+			];
 
-			const cmd = useNodeDirect ? nodePath : (isWin ? `"${openclawBin}"` : openclawBin);
-			const args = useNodeDirect
+			let jsEntry = '';
+			for (const c of candidates) {
+				if (fs.existsSync(c)) {
+					jsEntry = c;
+					break;
+				}
+			}
+
+			// Fallback: read package.json bin field
+			if (!jsEntry) {
+				try {
+					const pkgPath = path.join(openclawDir, 'node_modules', 'openclaw', 'package.json');
+					const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+					const binEntry = typeof pkg.bin === 'string' ? pkg.bin : (pkg.bin?.openclaw || '');
+					if (binEntry) {
+						jsEntry = path.join(openclawDir, 'node_modules', 'openclaw', binEntry);
+					}
+				} catch {}
+			}
+
+			const cmd = nodePath;
+			const args = jsEntry
 				? [jsEntry, 'gateway', 'start', '--port', String(this.port)]
-				: ['gateway', 'start', '--port', String(this.port)];
+				: [openclawBin, 'gateway', 'start', '--port', String(this.port)];
 
 			outputChannel.appendLine(`Exec: ${cmd} ${args.join(' ')}`);
 
 			this.process = spawn(cmd, args, {
 				stdio: ['ignore', 'pipe', 'pipe'],
 				detached: false,
-				shell: isWin && !useNodeDirect,
 				env: { ...process.env }
 			});
 
