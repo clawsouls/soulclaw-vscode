@@ -14,6 +14,7 @@ export let workspaceTracker: WorkspaceTracker;
 export let outputChannel: vscode.OutputChannel;
 
 export async function activate(context: vscode.ExtensionContext) {
+	_context = context;
 	// Create output channel (shows in OUTPUT panel Tasks dropdown)
 	outputChannel = vscode.window.createOutputChannel('ClawSouls Agent');
 	context.subscriptions.push(outputChannel);
@@ -22,7 +23,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Register ALL commands first — before anything that might throw
 	context.subscriptions.push(
-		vscode.commands.registerCommand('clawsouls.setup', () => {
+		vscode.commands.registerCommand('clawsouls.setup', async () => {
 			if (gatewayConnection?.currentState === 'connected' || gatewayConnection?.currentState === 'connecting') {
 				gatewayConnection.disconnect();
 				outputChannel.appendLine('Gateway disconnected for setup');
@@ -31,7 +32,10 @@ export async function activate(context: vscode.ExtensionContext) {
 				gatewayLauncher.stop();
 				outputChannel.appendLine('Gateway process stopped for setup');
 			}
-			return setupWizard();
+			await setupWizard();
+			// Restart gateway after setup completes
+			outputChannel.appendLine('Setup complete — restarting Gateway...');
+			await restartGateway();
 		}),
 		vscode.commands.registerCommand('clawsouls.openChat', () => chatPanel?.show()),
 		vscode.commands.registerCommand('clawsouls.restartGateway', () => gatewayConnection?.restart()),
@@ -73,49 +77,57 @@ export async function activate(context: vscode.ExtensionContext) {
 			treeDataProvider: soulExplorerProvider
 		});
 
-		// Auto-launch and connect
-		const config = vscode.workspace.getConfiguration('clawsouls');
-		if (config.get('autoConnect', true)) {
-			gatewayLauncher = new GatewayLauncher(context);
-			outputChannel.appendLine('Ensuring Gateway is running...');
-			await gatewayLauncher.ensureRunning();
-			// Pass the auto-generated token to the connection
-			if (gatewayLauncher.gatewayToken) {
-				gatewayConnection.setToken(gatewayLauncher.gatewayToken);
-			}
-			outputChannel.appendLine('Connecting to Gateway...');
-			// Gateway may still be starting — retry connection with delay
-			let connected = false;
-			for (let i = 0; i < 6; i++) {
-				try {
-					await gatewayConnection.connect();
-					// Wait a bit to see if connection succeeds
-					await new Promise(r => setTimeout(r, 3000));
-					if (gatewayConnection.currentState === 'connected') {
-						connected = true;
-						break;
-					}
-					gatewayConnection.disconnect();
-				} catch {}
-				outputChannel.appendLine(`Connection attempt ${i + 1} failed, retrying in 5s...`);
-				await new Promise(r => setTimeout(r, 5000));
-			}
-			if (!connected) {
-				outputChannel.appendLine('Could not connect to Gateway after retries');
-			}
-		}
-
-		// Show setup wizard on first run
+		// Show setup wizard on first run (before gateway launch so config is ready)
 		const hasSetup = context.globalState.get('hasSetup', false);
 		if (!hasSetup) {
 			await setupWizard();
 			context.globalState.update('hasSetup', true);
 		}
 
+		// Launch gateway and connect
+		await restartGateway();
+
 		outputChannel.appendLine('Fully initialized');
 	} catch (err) {
 		outputChannel.appendLine(`Activation error: ${err}`);
 		console.error('ClawSouls Agent activation error:', err);
+	}
+}
+
+let _context: vscode.ExtensionContext;
+
+async function restartGateway(): Promise<void> {
+	const config = vscode.workspace.getConfiguration('clawsouls');
+	if (!config.get('autoConnect', true)) return;
+
+	if (!gatewayLauncher) {
+		gatewayLauncher = new GatewayLauncher(_context);
+	}
+
+	outputChannel.appendLine('Ensuring Gateway is running...');
+	await gatewayLauncher.ensureRunning();
+
+	if (gatewayLauncher.gatewayToken) {
+		gatewayConnection.setToken(gatewayLauncher.gatewayToken);
+	}
+
+	outputChannel.appendLine('Connecting to Gateway...');
+	let connected = false;
+	for (let i = 0; i < 6; i++) {
+		try {
+			await gatewayConnection.connect();
+			await new Promise(r => setTimeout(r, 3000));
+			if (gatewayConnection.currentState === 'connected') {
+				connected = true;
+				break;
+			}
+			gatewayConnection.disconnect();
+		} catch {}
+		outputChannel.appendLine(`Connection attempt ${i + 1} failed, retrying in 5s...`);
+		await new Promise(r => setTimeout(r, 5000));
+	}
+	if (!connected) {
+		outputChannel.appendLine('Could not connect to Gateway after retries');
 	}
 }
 
