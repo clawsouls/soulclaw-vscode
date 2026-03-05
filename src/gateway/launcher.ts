@@ -27,39 +27,113 @@ export class GatewayLauncher {
 		}
 
 		// Check Node.js version (OpenClaw requires Node 22+)
-		try {
-			const nodeVer = execSync('node --version', { encoding: 'utf-8', timeout: 5000 }).trim();
-			outputChannel.appendLine(`Node.js version: ${nodeVer}`);
-			const major = parseInt(nodeVer.replace('v', '').split('.')[0]);
-			if (major < 22) {
-				const choice = await vscode.window.showErrorMessage(
-					`OpenClaw requires Node.js 22+. You have ${nodeVer}. Please upgrade Node.js.`,
-					'Download Node.js'
-				);
-				if (choice === 'Download Node.js') {
-					vscode.env.openExternal(vscode.Uri.parse('https://nodejs.org/'));
-				}
-				return false;
+		const nodePath = this.findSuitableNode();
+		if (!nodePath) {
+			const choice = await vscode.window.showErrorMessage(
+				'OpenClaw requires Node.js 22+. Please install via nvm: `nvm install 24 && nvm use 24`',
+				'Download Node.js'
+			);
+			if (choice === 'Download Node.js') {
+				vscode.env.openExternal(vscode.Uri.parse('https://nodejs.org/'));
 			}
-		} catch {
-			vscode.window.showErrorMessage('Node.js not found. OpenClaw requires Node.js 22+.');
 			return false;
 		}
+		outputChannel.appendLine(`Using Node: ${nodePath}`);
 
 		// Ensure OpenClaw is installed in extension storage
-		const openclawBin = await this.ensureInstalled();
+		const openclawBin = await this.ensureInstalled(nodePath);
 		if (!openclawBin) {
 			return false;
 		}
 
-		return await this.startGateway(openclawBin);
+		return await this.startGateway(openclawBin, nodePath);
+	}
+
+	/**
+	 * Find a Node.js 22+ binary. Checks: default PATH, nvm-windows, nvm-unix, fnm, volta.
+	 */
+	private findSuitableNode(): string | null {
+		const isWin = process.platform === 'win32';
+		const home = process.env.HOME || process.env.USERPROFILE || '';
+
+		// Check candidates
+		const candidates: string[] = ['node']; // default PATH first
+
+		if (isWin) {
+			// nvm-windows: C:\Users\USER\AppData\Roaming\nvm\v24.x.x\node.exe
+			const nvmHome = process.env.NVM_HOME || path.join(process.env.APPDATA || '', 'nvm');
+			try {
+				const dirs = fs.readdirSync(nvmHome).filter(d => d.startsWith('v'));
+				// Sort descending to prefer highest version
+				dirs.sort((a, b) => {
+					const va = parseInt(a.replace('v', '').split('.')[0]);
+					const vb = parseInt(b.replace('v', '').split('.')[0]);
+					return vb - va;
+				});
+				for (const d of dirs) {
+					candidates.push(path.join(nvmHome, d, 'node.exe'));
+				}
+			} catch {}
+			// volta
+			const voltaNode = path.join(home, '.volta', 'bin', 'node.exe');
+			candidates.push(voltaNode);
+		} else {
+			// nvm-unix: ~/.nvm/versions/node/v24.x.x/bin/node
+			const nvmDir = process.env.NVM_DIR || path.join(home, '.nvm');
+			try {
+				const versionsDir = path.join(nvmDir, 'versions', 'node');
+				const dirs = fs.readdirSync(versionsDir).filter(d => d.startsWith('v'));
+				dirs.sort((a, b) => {
+					const va = parseInt(a.replace('v', '').split('.')[0]);
+					const vb = parseInt(b.replace('v', '').split('.')[0]);
+					return vb - va;
+				});
+				for (const d of dirs) {
+					candidates.push(path.join(versionsDir, d, 'bin', 'node'));
+				}
+			} catch {}
+			// fnm
+			try {
+				const fnmDir = path.join(home, '.local', 'share', 'fnm', 'node-versions');
+				const dirs = fs.readdirSync(fnmDir).filter(d => d.startsWith('v'));
+				dirs.sort((a, b) => {
+					const va = parseInt(a.replace('v', '').split('.')[0]);
+					const vb = parseInt(b.replace('v', '').split('.')[0]);
+					return vb - va;
+				});
+				for (const d of dirs) {
+					candidates.push(path.join(fnmDir, d, 'installation', 'bin', 'node'));
+				}
+			} catch {}
+			// volta
+			candidates.push(path.join(home, '.volta', 'bin', 'node'));
+			// homebrew
+			candidates.push('/opt/homebrew/bin/node', '/usr/local/bin/node');
+		}
+
+		for (const candidate of candidates) {
+			try {
+				const ver = execSync(`"${candidate}" --version`, {
+					encoding: 'utf-8',
+					timeout: 5000,
+					windowsHide: true
+				}).trim();
+				const major = parseInt(ver.replace('v', '').split('.')[0]);
+				if (major >= 22) {
+					outputChannel.appendLine(`Found Node ${ver} at ${candidate}`);
+					return candidate;
+				}
+			} catch {}
+		}
+
+		return null;
 	}
 
 	/**
 	 * Install OpenClaw into extension's globalStorage (contained, no system pollution).
 	 * Path: ~/.vscode/globalStorage/clawsouls.clawsouls-agent/openclaw/
 	 */
-	private async ensureInstalled(): Promise<string | null> {
+	private async ensureInstalled(nodePath: string): Promise<string | null> {
 		const openclawDir = path.join(this.storagePath, 'openclaw');
 		const isWin = process.platform === 'win32';
 		const binPath = isWin
@@ -96,14 +170,20 @@ export class GatewayLauncher {
 				const pkg = { name: 'clawsouls-agent-runtime', version: '1.0.0', private: true };
 				fs.writeFileSync(path.join(openclawDir, 'package.json'), JSON.stringify(pkg));
 
-				// Find npm
-				const npmCmd = isWin ? 'npm.cmd' : 'npm';
+				// Use npm from the same Node installation
+				const nodeDir = path.dirname(nodePath);
+				const npmCmd = isWin
+					? path.join(nodeDir, 'npm.cmd')
+					: path.join(nodeDir, 'npm');
+				const npmFallback = isWin ? 'npm.cmd' : 'npm';
+				const npm = fs.existsSync(npmCmd) ? `"${npmCmd}"` : npmFallback;
 
 				outputChannel.appendLine(`Installing openclaw@${OPENCLAW_VERSION} into ${openclawDir}...`);
+				outputChannel.appendLine(`Using npm: ${npm}`);
 
 				// Install OpenClaw
 				execSync(
-					`${npmCmd} install openclaw@${OPENCLAW_VERSION} --no-save --legacy-peer-deps`,
+					`${npm} install openclaw@${OPENCLAW_VERSION} --no-save --legacy-peer-deps`,
 					{
 						cwd: openclawDir,
 						encoding: 'utf-8',
@@ -131,17 +211,32 @@ export class GatewayLauncher {
 		});
 	}
 
-	private async startGateway(openclawBin: string): Promise<boolean> {
+	private async startGateway(openclawBin: string, nodePath: string): Promise<boolean> {
 		return new Promise((resolve) => {
 			outputChannel.appendLine(`Starting Gateway on port ${this.port}...`);
 
+			// Run openclaw via the specific Node binary to ensure correct version
+			// openclawBin is a JS script, run it with: node <openclawBin> gateway start --port ...
+			const openclawScript = openclawBin.replace(/\.cmd$/, '');
 			const isWin = process.platform === 'win32';
-			const cmd = isWin ? `"${openclawBin}"` : openclawBin;
 
-			this.process = spawn(cmd, ['gateway', 'start', '--port', String(this.port)], {
+			// On Windows, .cmd files are shell scripts. Use node directly with the JS entry point.
+			const openclawDir = path.join(this.storagePath, 'openclaw');
+			const jsEntry = path.join(openclawDir, 'node_modules', 'openclaw', 'dist', 'cli.mjs');
+			const entryPoint = fs.existsSync(jsEntry) ? jsEntry : openclawBin;
+			const useNodeDirect = fs.existsSync(jsEntry);
+
+			const cmd = useNodeDirect ? nodePath : (isWin ? `"${openclawBin}"` : openclawBin);
+			const args = useNodeDirect
+				? [jsEntry, 'gateway', 'start', '--port', String(this.port)]
+				: ['gateway', 'start', '--port', String(this.port)];
+
+			outputChannel.appendLine(`Exec: ${cmd} ${args.join(' ')}`);
+
+			this.process = spawn(cmd, args, {
 				stdio: ['ignore', 'pipe', 'pipe'],
 				detached: false,
-				shell: isWin,
+				shell: isWin && !useNodeDirect,
 				env: { ...process.env }
 			});
 
