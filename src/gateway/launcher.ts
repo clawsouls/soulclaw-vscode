@@ -10,6 +10,7 @@ export class GatewayLauncher {
 	private process: ChildProcess | null = null;
 	private port: number;
 	private storagePath: string;
+	public gatewayToken: string = '';
 
 	constructor(private context: vscode.ExtensionContext) {
 		const config = vscode.workspace.getConfiguration('clawsouls');
@@ -245,9 +246,16 @@ export class GatewayLauncher {
 			}
 
 			const cmd = nodePath;
+			// Generate a random token for gateway auth
+			const crypto = require('crypto');
+			const token = crypto.randomBytes(16).toString('hex');
+			this.gatewayToken = token;
+			outputChannel.appendLine(`Gateway token: ${token.substring(0, 8)}...`);
+
+			const baseArgs = ['gateway', '--port', String(this.port), '--allow-unconfigured', '--dev', '--token', token];
 			const args = jsEntry
-				? [jsEntry, 'gateway', '--port', String(this.port), '--allow-unconfigured', '--dev']
-				: [openclawBin, 'gateway', '--port', String(this.port), '--allow-unconfigured', '--dev'];
+				? [jsEntry, ...baseArgs]
+				: [openclawBin, ...baseArgs];
 
 			outputChannel.appendLine(`Exec: ${cmd} ${args.join(' ')}`);
 
