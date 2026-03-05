@@ -1,109 +1,185 @@
 {
-  "name": "soul-spec",
-  "displayName": "Soul Spec — AI Persona Manager",
-  "description": "Browse, install, and manage AI persona packages (Soul Spec) for any LLM framework",
+  "name": "clawsouls-agent",
+  "displayName": "ClawSouls Agent — Soul-Powered AI Development",
+  "description": "Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools",
   "version": "0.1.0",
   "publisher": "clawsouls",
-  "icon": "resources/icon.png",
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other",
-    "Snippets",
-    "Linters"
+    "AI",
+    "SCM"
   ],
   "keywords": [
-    "AI",
-    "persona",
-    "soul",
-    "SOUL.md",
+    "ai",
     "agent",
-    "Claude",
-    "ChatGPT",
-    "Cursor",
-    "Windsurf"
+    "soul",
+    "persona",
+    "swarm",
+    "memory",
+    "collaboration",
+    "openclaw",
+    "team",
+    "chat"
   ],
   "activationEvents": [
-    "onView:soulSpecBrowser"
+    "onStartupFinished"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/clawsouls/vscode-soul-spec"
+    "url": "git+https://github.com/clawsouls/clawsouls-vscode.git"
   },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "soul-spec",
-          "title": "Soul Spec",
-          "icon": "resources/soul-icon.svg"
+          "id": "clawsouls-agent",
+          "title": "ClawSouls Agent",
+          "icon": "media/soul-icon.svg"
         }
       ]
     },
     "views": {
-      "soul-spec": [
+      "clawsouls-agent": [
         {
-          "id": "soulSpecBrowser",
-          "name": "Soul Browser"
+          "id": "clawsouls.chat",
+          "name": "💬 Chat",
+          "type": "webview"
+        },
+        {
+          "id": "clawsouls.soulExplorer",
+          "name": "📦 Soul Explorer"
+        },
+        {
+          "id": "clawsouls.swarm",
+          "name": "🐝 Swarm"
+        },
+        {
+          "id": "clawsouls.checkpoints",
+          "name": "📊 Checkpoints"
         }
       ]
     },
     "commands": [
       {
-        "command": "soulSpec.install",
-        "title": "Soul Spec: Install Soul"
+        "command": "clawsouls.setup",
+        "title": "ClawSouls: Setup"
       },
       {
-        "command": "soulSpec.init",
-        "title": "Soul Spec: Init"
+        "command": "clawsouls.openChat",
+        "title": "ClawSouls: Open Chat"
       },
       {
-        "command": "soulSpec.export",
-        "title": "Soul Spec: Export for..."
+        "command": "clawsouls.initSwarm",
+        "title": "ClawSouls: Init Swarm"
       },
       {
-        "command": "soulSpec.refresh",
+        "command": "clawsouls.joinAgent",
+        "title": "ClawSouls: Join as Agent"
+      },
+      {
+        "command": "clawsouls.pushChanges",
+        "title": "ClawSouls: Push Changes"
+      },
+      {
+        "command": "clawsouls.pullLatest",
+        "title": "ClawSouls: Pull Latest"
+      },
+      {
+        "command": "clawsouls.mergeBranches",
+        "title": "ClawSouls: Merge Branches"
+      },
+      {
+        "command": "clawsouls.runScan",
+        "title": "ClawSouls: Run SoulScan"
+      },
+      {
+        "command": "clawsouls.createCheckpoint",
+        "title": "ClawSouls: Create Checkpoint"
+      },
+      {
+        "command": "clawsouls.restartGateway",
+        "title": "ClawSouls: Restart Gateway"
+      },
+      {
+        "command": "clawsouls.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"
-      },
-      {
-        "command": "soulSpec.search",
-        "title": "Search",
-        "icon": "$(search)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "soulSpec.refresh",
-          "when": "view == soulSpecBrowser",
-          "group": "navigation"
-        },
-        {
-          "command": "soulSpec.search",
-          "when": "view == soulSpecBrowser",
+          "command": "clawsouls.refresh",
+          "when": "view == clawsouls.soulExplorer || view == clawsouls.swarm || view == clawsouls.checkpoints",
           "group": "navigation"
         }
       ]
     },
-    "jsonValidation": [
-      {
-        "fileMatch": "soul.json",
-        "url": "./resources/soul-spec-schema.json"
+    "configuration": {
+      "title": "ClawSouls Agent",
+      "properties": {
+        "clawsouls.mode": {
+          "type": "string",
+          "default": "auto",
+          "enum": ["auto", "standalone", "connected"],
+          "description": "Gateway connection mode"
+        },
+        "clawsouls.gatewayUrl": {
+          "type": "string",
+          "default": "ws://127.0.0.1:18789",
+          "description": "OpenClaw Gateway WebSocket URL"
+        },
+        "clawsouls.autoConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-connect to Gateway on startup"
+        },
+        "clawsouls.scanOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run SoulScan on file save"
+        },
+        "clawsouls.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show ClawSouls status bar"
+        },
+        "clawsouls.llmProvider": {
+          "type": "string",
+          "default": "anthropic",
+          "enum": ["anthropic", "openai", "ollama"],
+          "description": "LLM provider"
+        }
       }
-    ]
+    }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "lint": "eslint src --ext ts"
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "vsce package",
+    "vscode:prepublish": "npm run build",
+    "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
-    "typescript": "^5.3.0"
-  }
+    "@types/ws": "^8.18.1",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.27.3",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "marked": "^17.0.4",
+    "ws": "^8.19.0"
+  },
+  "author": "ClawSouls",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/clawsouls/clawsouls-vscode/issues"
+  },
+  "homepage": "https://github.com/clawsouls/clawsouls-vscode#readme"
 }
