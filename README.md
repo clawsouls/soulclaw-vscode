@@ -1,52 +1,100 @@
-# Soul Spec — AI Persona Manager
+# ClawSouls Agent — Soul-Powered AI Development
 
-Browse, install, and manage AI persona packages ([Soul Spec](https://clawsouls.ai)) directly from VS Code.
-
-Soul Spec is an open spec for defining portable AI personas that work across Claude Code, Cursor, Windsurf, OpenClaw, and more.
+Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools.
 
 ## Features
 
-### 🔍 Soul Browser
-Browse 80+ community souls from the sidebar. Search by name, category, or tags.
+- 💬 **Chat Panel** — Talk to your AI agent directly in VSCode
+- 📁 **Soul Explorer** — Browse soul.json, SOUL.md, AGENTS.md, MEMORY.md
+- 🐝 **Swarm Memory** — Team AI knowledge collaboration
+- 📊 **Checkpoints** — Version and rollback agent state
+- 🔍 **SoulScan** — Security scanning for AI personas
+- ⚙️ **Setup Wizard** — Guided configuration (LLM, API key, Gateway port)
+- 🔌 **Contained Runtime** — OpenClaw runs inside VSCode, zero system pollution
 
-### 📦 Install Soul
-**Command:** `Soul Spec: Install Soul`
+## Requirements
 
-Pick a soul from the registry and install it into your workspace — downloads `soul.json`, `SOUL.md`, `IDENTITY.md`, and all related files.
+- **Node.js 22+** (required for OpenClaw runtime)
+- VSCode 1.85+
 
-### 🆕 Initialize Soul
-**Command:** `Soul Spec: Init`
+## Node.js Installation Guide
 
-Scaffold a new soul with interactive prompts for name, description, and personality traits.
+The extension auto-detects Node.js from nvm, fnm, volta, or system PATH. You only need Node 22+ installed — no need to set it as default.
 
-### 🔄 Platform Export
-**Command:** `Soul Spec: Export for...`
+### macOS / Linux
 
-Export your soul for any platform:
-- **Claude Code** → `CLAUDE.md`
-- **Cursor** → `.cursor/rules/soul.md`
-- **Windsurf** → `.windsurfrules`
-- **OpenClaw** → as-is
+```bash
+# Using nvm
+nvm install 24
+# That's it — extension finds it automatically
+```
 
-### ✅ Validation
-Real-time linting of `soul.json` against Soul Spec v0.4 schema with errors and warnings in the Problems panel.
+### Windows
 
-### 🛡️ Status Bar
-Shows Soul Spec status when a `soul.json` is detected. Click to view details on clawsouls.ai.
+```powershell
+# Using nvm-windows
+nvm install 24 64
+nvm use 24.13.0
+```
+
+> ⚠️ **Windows ARM64 users**: Node.js 24 doesn't have official ARM64 builds yet. Use `nvm install 24 64` to install the x64 version (runs via emulation).
+
+### Verify
+
+```bash
+node --version
+# Should show v22.x.x or higher
+```
 
 ## Quick Start
 
-1. Install the extension
-2. Open the **Soul Spec** sidebar (activity bar icon)
-3. Browse or search for a soul
-4. Click to install, or run `Soul Spec: Init` to create your own
+1. Install the extension from `.vsix` or VS Marketplace
+2. Setup Wizard runs automatically on first launch
+3. Choose your LLM provider (Anthropic / OpenAI / Ollama)
+4. Enter API key (or Ollama URL + model)
+5. Configure Gateway port (default: 18789)
+6. Select or create a Soul
+7. Start chatting!
+
+## How It Works
+
+The extension automatically:
+1. Finds Node.js 22+ on your system (nvm, fnm, volta, PATH)
+2. Installs OpenClaw into extension storage (`globalStorage/`)
+3. Starts the OpenClaw Gateway as a background process
+4. Connects via WebSocket for real-time chat
+
+Everything is contained — uninstalling the extension cleans up completely.
+
+## Status Bar
+
+| Item | Description |
+|------|-------------|
+| 🔮 Soul Name | Current soul — click to chat |
+| 🐝 agent/main | Current agent branch |
+| 🟢 connected | Gateway status — click for action |
+| 🔄 | Restart Gateway |
+| ⚙️ Setup | Re-run setup wizard |
+
+## Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `clawsouls.gatewayUrl` | `ws://127.0.0.1:18789` | Gateway WebSocket URL |
+| `clawsouls.autoConnect` | `true` | Auto-connect on startup |
+| `clawsouls.llmProvider` | `anthropic` | LLM provider |
+| `clawsouls.llmApiKey` | | API key for LLM |
+| `clawsouls.ollamaUrl` | `http://127.0.0.1:11434` | Ollama API URL |
+| `clawsouls.ollamaModel` | `llama3` | Ollama model name |
+| `clawsouls.showStatusBar` | `true` | Show status bar items |
 
 ## Links
 
-- [ClawSouls Registry](https://clawsouls.ai)
-- [Blog](https://blog.clawsouls.ai)
-- [Soul Spec Documentation](https://clawsouls.ai/docs/soul-spec)
+- [ClawSouls](https://clawsouls.ai) — AI persona platform
+- [Soul Spec](https://clawsouls.ai/spec) — Open persona specification
+- [Documentation](https://docs.clawsouls.ai) — Full docs
+- [GitHub](https://github.com/clawsouls/clawsouls-vscode)
 
 ## License
 
-Apache-2.0
+MIT
