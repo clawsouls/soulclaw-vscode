@@ -76,7 +76,25 @@ export async function activate(context: vscode.ExtensionContext) {
 				gatewayConnection.setToken(gatewayLauncher.gatewayToken);
 			}
 			outputChannel.appendLine('Connecting to Gateway...');
-			await gatewayConnection.connect();
+			// Gateway may still be starting — retry connection with delay
+			let connected = false;
+			for (let i = 0; i < 6; i++) {
+				try {
+					await gatewayConnection.connect();
+					// Wait a bit to see if connection succeeds
+					await new Promise(r => setTimeout(r, 3000));
+					if (gatewayConnection.currentState === 'connected') {
+						connected = true;
+						break;
+					}
+					gatewayConnection.disconnect();
+				} catch {}
+				outputChannel.appendLine(`Connection attempt ${i + 1} failed, retrying in 5s...`);
+				await new Promise(r => setTimeout(r, 5000));
+			}
+			if (!connected) {
+				outputChannel.appendLine('Could not connect to Gateway after retries');
+			}
 		}
 
 		// Show setup wizard on first run
