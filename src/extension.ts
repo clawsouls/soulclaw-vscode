@@ -9,8 +9,13 @@ import { setupWizard } from './commands/setup';
 export let gatewayConnection: GatewayConnection;
 export let chatPanel: ChatPanel;
 export let workspaceTracker: WorkspaceTracker;
+export let outputChannel: vscode.OutputChannel;
 
 export async function activate(context: vscode.ExtensionContext) {
+	// Create output channel (shows in OUTPUT panel Tasks dropdown)
+	outputChannel = vscode.window.createOutputChannel('ClawSouls Agent');
+	context.subscriptions.push(outputChannel);
+	outputChannel.appendLine('ClawSouls Agent v0.1.0 activated');
 	console.log('ClawSouls Agent activated');
 
 	// Initialize workspace tracker
@@ -67,6 +72,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Auto-connect if enabled
 	const config = vscode.workspace.getConfiguration('clawsouls');
 	if (config.get('autoConnect', true)) {
+		outputChannel.appendLine('Connecting to Gateway...');
 		await gatewayConnection.connect();
 	}
 
