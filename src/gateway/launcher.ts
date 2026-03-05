@@ -278,9 +278,36 @@ export class GatewayLauncher {
 					envVars['ANTHROPIC_API_KEY'] = llmApiKey;
 				}
 			}
-			// Ensure state dir exists
+			// Ensure state dir and auth profile exist
 			if (!fs.existsSync(stateDir)) {
 				fs.mkdirSync(stateDir, { recursive: true });
+			}
+			// Write auth-profiles.json for the contained gateway
+			if (llmApiKey) {
+				const agentDir = path.join(stateDir, 'agents', 'main', 'agent');
+				if (!fs.existsSync(agentDir)) {
+					fs.mkdirSync(agentDir, { recursive: true });
+				}
+				const providerId = llmProvider === 'openai' ? 'openai' : 'anthropic';
+				const authProfiles = {
+					version: 1,
+					profiles: {
+						[`${providerId}:default`]: {
+							type: 'token',
+							provider: providerId,
+							token: llmApiKey
+						}
+					},
+					lastGood: {
+						[providerId]: `${providerId}:default`
+					},
+					usageStats: {}
+				};
+				fs.writeFileSync(
+					path.join(agentDir, 'auth-profiles.json'),
+					JSON.stringify(authProfiles, null, 2)
+				);
+				outputChannel.appendLine(`Auth profile written for ${providerId}`);
 			}
 
 			this.process = spawn(cmd, args, {

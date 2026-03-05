@@ -113,6 +113,8 @@ export class GatewayConnection {
 				this.sendConnectRequest(nonce);
 				return;
 			}
+			// Log all events for debugging
+			log(`Event: ${msg.event} state=${msg.payload?.state || '-'}`);
 			// Forward other events
 			this.onMessageEmitter.fire(msg);
 			return;
@@ -135,6 +137,9 @@ export class GatewayConnection {
 		this.onMessageEmitter.fire(msg);
 	}
 
+	private _sessionKey: string = 'main';
+	public get sessionKey(): string { return this._sessionKey; }
+
 	private async sendConnectRequest(nonce?: string): Promise<void> {
 		const params: any = {
 			minProtocol: 3,
@@ -154,7 +159,12 @@ export class GatewayConnection {
 
 		try {
 			const hello = await this.request('connect', params);
-			log(`Connected! Gateway hello received.`);
+			// Extract session key from hello snapshot
+			const defaults = hello?.snapshot?.sessionDefaults;
+			if (defaults?.mainSessionKey) {
+				this._sessionKey = defaults.mainSessionKey;
+			}
+			log(`Connected! sessionKey=${this._sessionKey}`);
 			this.setState('connected');
 			this.startPing();
 		} catch (err: any) {
@@ -220,8 +230,9 @@ export class GatewayConnection {
 
 	/** Send a chat message to the gateway */
 	public async sendChat(text: string, sessionKey?: string): Promise<any> {
-		const key = sessionKey || 'main';
+		const key = sessionKey || this._sessionKey;
 		const idempotencyKey = crypto.randomUUID();
+		log(`chat.send → sessionKey=${key}, msg=${text.slice(0, 50)}`);
 		return this.request('chat.send', {
 			sessionKey: key,
 			message: text,
