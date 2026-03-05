@@ -119,8 +119,12 @@ export class ChatPanel {
 			outputChannel?.appendLine(`messages count: ${Array.isArray(messages) ? messages.length : 'not array'}`);
 			
 			if (Array.isArray(messages) && messages.length > 0) {
+				// Log ALL messages for debugging
+				for (let j = 0; j < messages.length; j++) {
+					const m = messages[j];
+					outputChannel?.appendLine(`msg[${j}]: role=${m?.role} content=${JSON.stringify(m?.content)?.slice(0, 500)}`);
+				}
 				const last = messages[messages.length - 1];
-				outputChannel?.appendLine(`last msg: role=${last?.role} content_type=${typeof last?.content} content=${JSON.stringify(last?.content)?.slice(0, 200)}`);
 				
 				// Find last assistant message
 				for (let i = messages.length - 1; i >= 0; i--) {
@@ -148,10 +152,17 @@ export class ChatPanel {
 		const content = message.content;
 		if (typeof content === 'string') return content;
 		if (Array.isArray(content)) {
-			return content
-				.filter((b: any) => b.type === 'text' && typeof b.text === 'string')
-				.map((b: any) => b.text)
-				.join('\n') || null;
+			// Try text blocks first, then any block with text
+			const texts = content
+				.filter((b: any) => typeof b.text === 'string')
+				.map((b: any) => b.text);
+			if (texts.length > 0) return texts.join('\n');
+			// Fallback: stringify non-empty content
+			if (content.length > 0) return JSON.stringify(content);
+			return null;
+		}
+		if (typeof content === 'object' && content !== null) {
+			return JSON.stringify(content);
 		}
 		return null;
 	}
