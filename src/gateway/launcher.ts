@@ -283,32 +283,39 @@ export class GatewayLauncher {
 			if (!fs.existsSync(stateDir)) {
 				fs.mkdirSync(stateDir, { recursive: true });
 			}
-			// Write auth-profiles.json for the contained gateway
+			// Write auth-profiles.json to BOTH contained state dir AND default ~/.openclaw/
+			// OpenClaw v2026.2.9 may ignore OPENCLAW_STATE_DIR in gateway mode
 			if (llmApiKey) {
-				const agentDir = path.join(stateDir, 'agents', 'main', 'agent');
-				if (!fs.existsSync(agentDir)) {
-					fs.mkdirSync(agentDir, { recursive: true });
-				}
+				const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+				const authDirs = [
+					path.join(stateDir, 'agents', 'main', 'agent'),
+					...(homeDir ? [path.join(homeDir, '.openclaw', 'agents', 'main', 'agent')] : [])
+				];
+				for (const agentDir of authDirs) {
+					if (!fs.existsSync(agentDir)) {
+						fs.mkdirSync(agentDir, { recursive: true });
+					}
 				const providerId = llmProvider === 'openai' ? 'openai' : 'anthropic';
-				const authProfiles = {
-					version: 1,
-					profiles: {
-						[`${providerId}:default`]: {
-							type: 'token',
-							provider: providerId,
-							token: llmApiKey
-						}
-					},
-					lastGood: {
-						[providerId]: `${providerId}:default`
-					},
-					usageStats: {}
-				};
-				fs.writeFileSync(
-					path.join(agentDir, 'auth-profiles.json'),
-					JSON.stringify(authProfiles, null, 2)
-				);
-				outputChannel.appendLine(`Auth profile written for ${providerId}`);
+					const authProfiles = {
+						version: 1,
+						profiles: {
+							[`${providerId}:default`]: {
+								type: 'token',
+								provider: providerId,
+								token: llmApiKey
+							}
+						},
+						lastGood: {
+							[providerId]: `${providerId}:default`
+						},
+						usageStats: {}
+					};
+					fs.writeFileSync(
+						path.join(agentDir, 'auth-profiles.json'),
+						JSON.stringify(authProfiles, null, 2)
+					);
+					outputChannel.appendLine(`Auth profile written to ${agentDir}`);
+				}
 			}
 
 			// Write minimal openclaw.json config if not exists
