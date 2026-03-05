@@ -18,77 +18,56 @@ export async function activate(context: vscode.ExtensionContext) {
 	outputChannel.appendLine('ClawSouls Agent v0.1.0 activated');
 	console.log('ClawSouls Agent activated');
 
+	// Register ALL commands first — before anything that might throw
+	context.subscriptions.push(
+		vscode.commands.registerCommand('clawsouls.setup', () => setupWizard()),
+		vscode.commands.registerCommand('clawsouls.openChat', () => chatPanel?.show()),
+		vscode.commands.registerCommand('clawsouls.restartGateway', () => gatewayConnection?.restart()),
+		vscode.commands.registerCommand('clawsouls.refresh', () => {}),
+		vscode.commands.registerCommand('clawsouls.initSwarm', () => vscode.window.showInformationMessage('Swarm init - Coming soon!')),
+		vscode.commands.registerCommand('clawsouls.joinAgent', () => vscode.window.showInformationMessage('Join agent - Coming soon!')),
+		vscode.commands.registerCommand('clawsouls.pushChanges', () => vscode.window.showInformationMessage('Push changes - Coming soon!')),
+		vscode.commands.registerCommand('clawsouls.pullLatest', () => vscode.window.showInformationMessage('Pull latest - Coming soon!')),
+		vscode.commands.registerCommand('clawsouls.mergeBranches', () => vscode.window.showInformationMessage('Merge branches - Coming soon!')),
+		vscode.commands.registerCommand('clawsouls.runScan', () => vscode.window.showInformationMessage('Run scan - Coming soon!')),
+		vscode.commands.registerCommand('clawsouls.createCheckpoint', () => vscode.window.showInformationMessage('Create checkpoint - Coming soon!'))
+	);
+	outputChannel.appendLine('Commands registered');
+
 	try {
+		// Initialize workspace tracker
+		workspaceTracker = new WorkspaceTracker(context);
+		
+		// Initialize Gateway connection
+		gatewayConnection = new GatewayConnection(context);
+		
+		// Initialize chat panel
+		chatPanel = new ChatPanel(context, gatewayConnection);
+		
+		// Initialize status bar
+		const statusBar = new StatusBarManager(context, gatewayConnection);
+		
+		// Initialize Soul Explorer
+		const soulExplorerProvider = new SoulExplorerProvider(context);
+		vscode.window.createTreeView('clawsouls.soulExplorer', {
+			treeDataProvider: soulExplorerProvider
+		});
 
-	// Initialize workspace tracker
-	workspaceTracker = new WorkspaceTracker(context);
-	
-	// Initialize Gateway connection
-	gatewayConnection = new GatewayConnection(context);
-	
-	// Initialize chat panel
-	chatPanel = new ChatPanel(context, gatewayConnection);
-	
-	// Initialize status bar
-	const statusBar = new StatusBarManager(context, gatewayConnection);
-	
-	// Initialize Soul Explorer
-	const soulExplorerProvider = new SoulExplorerProvider(context);
-	vscode.window.createTreeView('clawsouls.soulExplorer', {
-		treeDataProvider: soulExplorerProvider
-	});
-
-	// Register commands
-	const commands = [
-		vscode.commands.registerCommand('clawsouls.setup', setupWizard),
-		vscode.commands.registerCommand('clawsouls.openChat', () => chatPanel.show()),
-		vscode.commands.registerCommand('clawsouls.restartGateway', () => gatewayConnection.restart()),
-		vscode.commands.registerCommand('clawsouls.refresh', () => {
-			soulExplorerProvider.refresh();
-		}),
-		vscode.commands.registerCommand('clawsouls.initSwarm', async () => {
-			vscode.window.showInformationMessage('Swarm init - Coming soon!');
-		}),
-		vscode.commands.registerCommand('clawsouls.joinAgent', async () => {
-			vscode.window.showInformationMessage('Join agent - Coming soon!');
-		}),
-		vscode.commands.registerCommand('clawsouls.pushChanges', async () => {
-			vscode.window.showInformationMessage('Push changes - Coming soon!');
-		}),
-		vscode.commands.registerCommand('clawsouls.pullLatest', async () => {
-			vscode.window.showInformationMessage('Pull latest - Coming soon!');
-		}),
-		vscode.commands.registerCommand('clawsouls.mergeBranches', async () => {
-			vscode.window.showInformationMessage('Merge branches - Coming soon!');
-		}),
-		vscode.commands.registerCommand('clawsouls.runScan', async () => {
-			vscode.window.showInformationMessage('Run scan - Coming soon!');
-		}),
-		vscode.commands.registerCommand('clawsouls.createCheckpoint', async () => {
-			vscode.window.showInformationMessage('Create checkpoint - Coming soon!');
-		})
-	];
-
-	context.subscriptions.push(...commands);
-
-	// Auto-connect if enabled
-	const config = vscode.workspace.getConfiguration('clawsouls');
-	if (config.get('autoConnect', true)) {
-		outputChannel.appendLine('Connecting to Gateway...');
-		await gatewayConnection.connect();
-	}
-
-	// Show setup wizard on first run
-	const hasSetup = context.globalState.get('hasSetup', false);
-	if (!hasSetup) {
-		try {
-			await setupWizard();
-		} catch (err) {
-			outputChannel.appendLine(`Setup wizard error: ${err}`);
+		// Auto-connect if enabled
+		const config = vscode.workspace.getConfiguration('clawsouls');
+		if (config.get('autoConnect', true)) {
+			outputChannel.appendLine('Connecting to Gateway...');
+			await gatewayConnection.connect();
 		}
-		context.globalState.update('hasSetup', true);
-	}
 
+		// Show setup wizard on first run
+		const hasSetup = context.globalState.get('hasSetup', false);
+		if (!hasSetup) {
+			await setupWizard();
+			context.globalState.update('hasSetup', true);
+		}
+
+		outputChannel.appendLine('Fully initialized');
 	} catch (err) {
 		outputChannel.appendLine(`Activation error: ${err}`);
 		console.error('ClawSouls Agent activation error:', err);
