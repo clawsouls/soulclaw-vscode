@@ -79,7 +79,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Show setup wizard on first run
 	const hasSetup = context.globalState.get('hasSetup', false);
 	if (!hasSetup) {
-		await setupWizard();
+		try {
+			await setupWizard();
+		} catch (err) {
+			outputChannel.appendLine(`Setup wizard error: ${err}`);
+		}
 		context.globalState.update('hasSetup', true);
 	}
 }

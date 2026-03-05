@@ -1,6 +1,6 @@
 {
   "name": "clawsouls-agent",
-  "displayName": "ClawSouls Agent — Soul-Powered AI Development",
+  "displayName": "ClawSouls Agent \u2014 Soul-Powered AI Development",
   "description": "Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools",
   "version": "0.1.0",
   "publisher": "clawsouls",
@@ -25,7 +25,13 @@
     "chat"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onView:clawsouls.chat",
+    "onView:clawsouls.soulExplorer",
+    "onView:clawsouls.swarm",
+    "onView:clawsouls.checkpoints",
+    "onCommand:clawsouls.setup",
+    "onCommand:clawsouls.openChat"
   ],
   "main": "./dist/extension.js",
   "repository": {
@@ -46,20 +52,20 @@
       "clawsouls-agent": [
         {
           "id": "clawsouls.chat",
-          "name": "💬 Chat",
+          "name": "\ud83d\udcac Chat",
           "type": "webview"
         },
         {
           "id": "clawsouls.soulExplorer",
-          "name": "📦 Soul Explorer"
+          "name": "\ud83d\udce6 Soul Explorer"
         },
         {
           "id": "clawsouls.swarm",
-          "name": "🐝 Swarm"
+          "name": "\ud83d\udc1d Swarm"
         },
         {
           "id": "clawsouls.checkpoints",
-          "name": "📊 Checkpoints"
+          "name": "\ud83d\udcca Checkpoints"
         }
       ]
     },
@@ -125,7 +131,11 @@
         "clawsouls.mode": {
           "type": "string",
           "default": "auto",
-          "enum": ["auto", "standalone", "connected"],
+          "enum": [
+            "auto",
+            "standalone",
+            "connected"
+          ],
           "description": "Gateway connection mode"
         },
         "clawsouls.gatewayUrl": {
@@ -151,7 +161,11 @@
         "clawsouls.llmProvider": {
           "type": "string",
           "default": "anthropic",
-          "enum": ["anthropic", "openai", "ollama"],
+          "enum": [
+            "anthropic",
+            "openai",
+            "ollama"
+          ],
           "description": "LLM provider"
         }
       }
