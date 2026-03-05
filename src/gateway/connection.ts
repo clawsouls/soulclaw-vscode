@@ -220,9 +220,13 @@ export class GatewayConnection {
 
 	/** Send a chat message to the gateway */
 	public async sendChat(text: string, sessionKey?: string): Promise<any> {
+		const key = sessionKey || 'main';
+		const idempotencyKey = crypto.randomUUID();
 		return this.request('chat.send', {
+			sessionKey: key,
 			message: text,
-			...(sessionKey ? { sessionKey } : {})
+			idempotencyKey,
+			deliver: false
 		});
 	}
 	

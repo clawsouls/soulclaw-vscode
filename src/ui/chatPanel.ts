@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import { marked } from 'marked';
 import { GatewayConnection, GatewayMessage } from '../gateway/connection';
 import { workspaceTracker } from '../extension';
@@ -51,6 +52,10 @@ export class ChatPanel {
 		});
 		
 		if (this.panel) {
+			// Clear streaming indicator before updating
+			if (role === 'assistant') {
+				this.panel.webview.postMessage({ type: 'clearStream' });
+			}
 			this.updateWebviewContent();
 		}
 	}
@@ -66,28 +71,78 @@ export class ChatPanel {
 		}
 	}
 	
+	private currentRunId: string | null = null;
+	private streamBuffer: string = '';
+
 	private handleGatewayMessage(message: GatewayMessage): void {
-		// Handle responses from the agent
-		if (message.type === 'agent_response') {
-			this.addMessage('assistant', message.data?.content || 'No response');
+		// Handle chat events from gateway
+		if (message.type === 'event' && message.event === 'chat') {
+			const payload = message.payload as any;
+			if (!payload) return;
+
+			const state = payload.state;
+			if (state === 'delta') {
+				// Streaming delta — extract text from message
+				const text = this.extractText(payload.message);
+				if (text) {
+					this.streamBuffer = text;
+					this.updateStreamingMessage();
+				}
+			} else if (state === 'final') {
+				// Final message — fetch full history or use accumulated stream
+				const finalText = this.streamBuffer || this.extractText(payload.message) || '(no response)';
+				this.streamBuffer = '';
+				this.currentRunId = null;
+				this.addMessage('assistant', finalText);
+			} else if (state === 'error') {
+				this.streamBuffer = '';
+				this.currentRunId = null;
+				this.addMessage('assistant', `Error: ${payload.errorMessage || 'unknown error'}`);
+			} else if (state === 'aborted') {
+				this.streamBuffer = '';
+				this.currentRunId = null;
+				this.addMessage('assistant', '(aborted)');
+			}
 		}
 	}
-	
-	private sendMessageToAgent(text: string): void {
+
+	private extractText(message: any): string | null {
+		if (!message) return null;
+		const content = message.content;
+		if (typeof content === 'string') return content;
+		if (Array.isArray(content)) {
+			return content
+				.filter((b: any) => b.type === 'text' && typeof b.text === 'string')
+				.map((b: any) => b.text)
+				.join('\n') || null;
+		}
+		return null;
+	}
+
+	private updateStreamingMessage(): void {
+		if (this.panel) {
+			this.panel.webview.postMessage({
+				type: 'streamUpdate',
+				text: this.streamBuffer
+			});
+		}
+	}
+
+	private async sendMessageToAgent(text: string): Promise<void> {
 		// Add user message to chat
 		this.addMessage('user', text);
-		
-		// Add workspace context
-		const context = workspaceTracker?.getContext() || {};
-		
-		// Send to Gateway
-		this.gateway.sendMessage({
-			type: 'chat_message',
-			data: {
-				message: text,
-				context: context
-			}
-		});
+
+		// Generate idempotency key
+		const idempotencyKey = crypto.randomUUID();
+		this.currentRunId = idempotencyKey;
+		this.streamBuffer = '';
+
+		// Send via chat.send RPC
+		try {
+			await this.gateway.sendChat(text, undefined);
+		} catch (err: any) {
+			this.addMessage('assistant', `Failed to send: ${err.message}`);
+		}
 	}
 	
 	private insertFileIntoChat(filePath: string): void {
@@ -213,6 +268,24 @@ export class ChatPanel {
 						const message = event.data;
 						if (message.type === 'insertText') {
 							messageInput.value += message.text;
+						}
+						if (message.type === 'streamUpdate') {
+							// Show streaming response
+							let streamEl = document.getElementById('streaming');
+							if (!streamEl) {
+								streamEl = document.createElement('div');
+								streamEl.id = 'streaming';
+								streamEl.className = 'message assistant-message';
+								streamEl.innerHTML = '<div class="message-header"><span class="role-icon">🔮</span><span class="timestamp">typing...</span></div><div class="message-content" id="stream-content"></div>';
+								messagesContainer.appendChild(streamEl);
+							}
+							const contentEl = document.getElementById('stream-content');
+							if (contentEl) contentEl.textContent = message.text;
+							messagesContainer.scrollTop = messagesContainer.scrollHeight;
+						}
+						if (message.type === 'clearStream') {
+							const streamEl = document.getElementById('streaming');
+							if (streamEl) streamEl.remove();
 						}
 					});
 				</script>
