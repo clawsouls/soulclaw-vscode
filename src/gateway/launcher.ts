@@ -310,6 +310,46 @@ export class GatewayLauncher {
 				outputChannel.appendLine(`Auth profile written for ${providerId}`);
 			}
 
+			// Write minimal openclaw.json config if not exists
+			const configPath = path.join(stateDir, 'openclaw.json');
+			if (!fs.existsSync(configPath)) {
+				const provider = llmProvider === 'openai' ? 'openai' : 'anthropic';
+				const model = llmProvider === 'openai' ? 'openai/gpt-4o' : 'anthropic/claude-sonnet-4-20250514';
+				const ollamaUrl = config.get<string>('ollamaUrl', 'http://127.0.0.1:11434');
+				const ollamaModel = config.get<string>('ollamaModel', 'llama3');
+				
+				const openclawConfig: any = {
+					auth: {
+						profiles: {
+							[`${provider}:default`]: {
+								provider: provider,
+								mode: 'token'
+							}
+						}
+					},
+					agents: {
+						defaults: {
+							model: {
+								primary: llmProvider === 'ollama' 
+									? `ollama/${ollamaModel}` 
+									: model,
+								fallbacks: []
+							}
+						}
+					}
+				};
+				
+				if (llmProvider === 'ollama') {
+					openclawConfig.agents.defaults.model.primary = `ollama/${ollamaModel}`;
+					openclawConfig.providers = {
+						ollama: { baseUrl: ollamaUrl }
+					};
+				}
+				
+				fs.writeFileSync(configPath, JSON.stringify(openclawConfig, null, 2));
+				outputChannel.appendLine(`Config written: ${configPath} (model: ${openclawConfig.agents.defaults.model.primary})`);
+			}
+
 			this.process = spawn(cmd, args, {
 				stdio: ['pipe', 'pipe', 'pipe'],
 				detached: false,
