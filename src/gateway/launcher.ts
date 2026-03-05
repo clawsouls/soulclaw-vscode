@@ -246,8 +246,8 @@ export class GatewayLauncher {
 
 			const cmd = nodePath;
 			const args = jsEntry
-				? [jsEntry, 'gateway', 'start', '--port', String(this.port)]
-				: [openclawBin, 'gateway', 'start', '--port', String(this.port)];
+				? [jsEntry, 'gateway', '--port', String(this.port)]
+				: [openclawBin, 'gateway', '--port', String(this.port)];
 
 			outputChannel.appendLine(`Exec: ${cmd} ${args.join(' ')}`);
 
