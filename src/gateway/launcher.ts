@@ -246,8 +246,8 @@ export class GatewayLauncher {
 
 			const cmd = nodePath;
 			const args = jsEntry
-				? [jsEntry, 'gateway', '--port', String(this.port)]
-				: [openclawBin, 'gateway', '--port', String(this.port)];
+				? [jsEntry, 'gateway', '--port', String(this.port), '--allow-unconfigured']
+				: [openclawBin, 'gateway', '--port', String(this.port), '--allow-unconfigured'];
 
 			outputChannel.appendLine(`Exec: ${cmd} ${args.join(' ')}`);
 
@@ -271,6 +271,11 @@ export class GatewayLauncher {
 			this.process.stderr?.on('data', (data: Buffer) => {
 				const line = data.toString().trim();
 				outputChannel.appendLine(`[gateway:err] ${line}`);
+				// OpenClaw logs to stderr — detect ready state here too
+				if (!started && (line.includes('listening') || line.includes('ready') || line.includes('started') || line.includes('Gateway') && line.includes('ws://'))) {
+					started = true;
+					resolve(true);
+				}
 			});
 
 			this.process.on('error', (err) => {
