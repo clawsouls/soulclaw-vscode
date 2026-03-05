@@ -259,15 +259,28 @@ export class GatewayLauncher {
 
 			outputChannel.appendLine(`Exec: ${cmd} ${args.join(' ')}`);
 
+			// Pass LLM API key from extension settings as env var
+			const config = vscode.workspace.getConfiguration('clawsouls');
+			const llmProvider = config.get<string>('llmProvider', 'anthropic');
+			const llmApiKey = config.get<string>('llmApiKey', '');
+			const envVars: Record<string, string> = {
+				...process.env as Record<string, string>,
+				NO_COLOR: '1',
+				CI: '1',
+				OPENCLAW_NON_INTERACTIVE: '1'
+			};
+			if (llmApiKey) {
+				if (llmProvider === 'openai') {
+					envVars['OPENAI_API_KEY'] = llmApiKey;
+				} else {
+					envVars['ANTHROPIC_API_KEY'] = llmApiKey;
+				}
+			}
+
 			this.process = spawn(cmd, args, {
 				stdio: ['pipe', 'pipe', 'pipe'],
 				detached: false,
-				env: {
-					...process.env,
-					NO_COLOR: '1',
-					CI: '1',
-					OPENCLAW_NON_INTERACTIVE: '1'
-				}
+				env: envVars
 			});
 
 			// Close stdin immediately to prevent interactive prompts from blocking
