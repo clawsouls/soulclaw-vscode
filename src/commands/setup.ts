@@ -13,16 +13,21 @@ export async function setupWizard(): Promise<void> {
 
 	let currentStep = 1;
 	const maxSteps = 5;
+	let selectedProvider = '';
 
 	panel.webview.onDidReceiveMessage(async (message) => {
 		switch (message.type) {
 			case 'next':
+				if (currentStep === 1 && message.data?.provider) {
+					selectedProvider = message.data.provider;
+				}
 				await handleNextStep(panel, message.data, currentStep);
 				currentStep++;
+				updateWebviewContent(panel, currentStep, selectedProvider);
 				break;
 			case 'back':
 				currentStep--;
-				updateWebviewContent(panel, currentStep);
+				updateWebviewContent(panel, currentStep, selectedProvider);
 				break;
 			case 'finish':
 				await finishSetup(panel, message.data);
@@ -49,6 +54,12 @@ async function handleNextStep(panel: vscode.WebviewPanel, data: any, step: numbe
 				if (data.apiKey) {
 					await config.update('llmApiKey', data.apiKey, vscode.ConfigurationTarget.Global);
 				}
+				if (data.ollamaUrl) {
+					await config.update('ollamaUrl', data.ollamaUrl, vscode.ConfigurationTarget.Global);
+				}
+				if (data.ollamaModel) {
+					await config.update('ollamaModel', data.ollamaModel, vscode.ConfigurationTarget.Global);
+				}
 				break;
 			case 3:
 				if (data.port) {
@@ -66,7 +77,6 @@ async function handleNextStep(panel: vscode.WebviewPanel, data: any, step: numbe
 		console.error(`Setup step ${step} error:`, err);
 	}
 
-	updateWebviewContent(panel, step + 1);
 }
 
 async function finishSetup(panel: vscode.WebviewPanel, data: any): Promise<void> {
@@ -130,16 +140,16 @@ You are a helpful AI assistant.
 	await vscode.workspace.fs.writeFile(soulMdUri, Buffer.from(soulMarkdown));
 }
 
-function updateWebviewContent(panel: vscode.WebviewPanel, step: number): void {
-	panel.webview.html = getWebviewContent(step);
+function updateWebviewContent(panel: vscode.WebviewPanel, step: number, provider?: string): void {
+	panel.webview.html = getWebviewContent(step, provider);
 }
 
-function getWebviewContent(step: number): string {
+function getWebviewContent(step: number, provider?: string): string {
 	switch (step) {
 		case 1:
 			return getStep1Html();
 		case 2:
-			return getStep2Html();
+			return getStep2Html(provider);
 		case 3:
 			return getStepPortHtml();
 		case 4:
@@ -253,7 +263,100 @@ function getStep1Html(): string {
 	`;
 }
 
-function getStep2Html(): string {
+function getStep2Html(provider?: string): string {
+	// Read provider from VSCode config
+	const isOllama = provider === 'ollama';
+
+	if (isOllama) {
+		return `
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<meta charset="UTF-8">
+			<title>ClawSouls Setup - Step 2</title>
+			<style>
+				body { font-family: var(--vscode-font-family); padding: 20px; }
+				.container { max-width: 600px; margin: 0 auto; }
+				.step-header { text-align: center; margin-bottom: 30px; }
+				.config-section {
+					border: 1px solid var(--vscode-input-border);
+					border-radius: 8px;
+					padding: 20px;
+					margin: 15px 0;
+				}
+				input[type="text"] {
+					width: 100%;
+					padding: 8px;
+					border: 1px solid var(--vscode-input-border);
+					background: var(--vscode-input-background);
+					color: var(--vscode-input-foreground);
+					border-radius: 4px;
+					margin-top: 8px;
+				}
+				.hint { color: var(--vscode-descriptionForeground); font-size: 12px; margin-top: 6px; }
+				.buttons { text-align: center; margin-top: 30px; }
+				button {
+					margin: 0 10px;
+					padding: 10px 20px;
+					border: none;
+					background: var(--vscode-button-background);
+					color: var(--vscode-button-foreground);
+					border-radius: 4px;
+					cursor: pointer;
+				}
+			</style>
+		</head>
+		<body>
+			<div class="container">
+				<div class="step-header">
+					<h1>🏠 Ollama Configuration</h1>
+					<p>Step 2 of 5: Configure your local Ollama instance</p>
+				</div>
+
+				<div class="config-section">
+					<h3>Ollama URL</h3>
+					<input type="text" id="ollamaUrl" value="http://127.0.0.1:11434" />
+					<div class="hint">Default: http://127.0.0.1:11434</div>
+				</div>
+
+				<div class="config-section">
+					<h3>Model</h3>
+					<input type="text" id="ollamaModel" placeholder="llama3, codellama, mistral..." value="llama3" />
+					<div class="hint">Enter the model name you have pulled in Ollama.</div>
+				</div>
+
+				<div class="buttons">
+					<button onclick="back()">← Back</button>
+					<button onclick="next()">Next →</button>
+				</div>
+			</div>
+
+			<script>
+				const vscode = acquireVsCodeApi();
+
+				function next() {
+					vscode.postMessage({
+						type: 'next',
+						data: {
+							ollamaUrl: document.getElementById('ollamaUrl').value,
+							ollamaModel: document.getElementById('ollamaModel').value
+						}
+					});
+				}
+
+				function back() {
+					vscode.postMessage({ type: 'back' });
+				}
+			</script>
+		</body>
+		</html>
+		`;
+	}
+
+	// Anthropic / OpenAI — API key
+	const placeholder = provider === 'openai' ? 'sk-...' : 'sk-ant-...';
+	const providerName = provider === 'openai' ? 'OpenAI' : 'Anthropic';
+
 	return `
 		<!DOCTYPE html>
 		<html>
@@ -264,29 +367,29 @@ function getStep2Html(): string {
 				body { font-family: var(--vscode-font-family); padding: 20px; }
 				.container { max-width: 600px; margin: 0 auto; }
 				.step-header { text-align: center; margin-bottom: 30px; }
-				.auth-option { 
-					border: 1px solid var(--vscode-input-border); 
-					border-radius: 8px; 
-					padding: 20px; 
-					margin: 15px 0; 
+				.auth-option {
+					border: 1px solid var(--vscode-input-border);
+					border-radius: 8px;
+					padding: 20px;
+					margin: 15px 0;
 				}
-				input[type="password"] { 
-					width: 100%; 
-					padding: 8px; 
-					border: 1px solid var(--vscode-input-border); 
-					background: var(--vscode-input-background); 
-					color: var(--vscode-input-foreground); 
-					border-radius: 4px; 
+				input[type="password"] {
+					width: 100%;
+					padding: 8px;
+					border: 1px solid var(--vscode-input-border);
+					background: var(--vscode-input-background);
+					color: var(--vscode-input-foreground);
+					border-radius: 4px;
 				}
 				.buttons { text-align: center; margin-top: 30px; }
-				button { 
-					margin: 0 10px; 
-					padding: 10px 20px; 
-					border: none; 
-					background: var(--vscode-button-background); 
-					color: var(--vscode-button-foreground); 
-					border-radius: 4px; 
-					cursor: pointer; 
+				button {
+					margin: 0 10px;
+					padding: 10px 20px;
+					border: none;
+					background: var(--vscode-button-background);
+					color: var(--vscode-button-foreground);
+					border-radius: 4px;
+					cursor: pointer;
 				}
 			</style>
 		</head>
@@ -294,25 +397,25 @@ function getStep2Html(): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🔑 Authentication</h1>
-					<p>Step 2 of 5: Set up your API access</p>
+					<p>Step 2 of 5: Set up your ${providerName} API access</p>
 				</div>
-				
+
 				<div class="auth-option">
-					<h3>🔐 API Key</h3>
+					<h3>🔐 ${providerName} API Key</h3>
 					<p>Enter your API key to get started:</p>
-					<input type="password" id="apiKey" placeholder="sk-..." />
+					<input type="password" id="apiKey" placeholder="${placeholder}" />
 					<small>Your API key is stored securely in VSCode settings.</small>
 				</div>
-				
+
 				<div class="buttons">
 					<button onclick="back()">← Back</button>
 					<button onclick="next()">Next →</button>
 				</div>
 			</div>
-			
+
 			<script>
 				const vscode = acquireVsCodeApi();
-				
+
 				function next() {
 					const apiKey = document.getElementById('apiKey').value;
 					vscode.postMessage({
@@ -320,7 +423,7 @@ function getStep2Html(): string {
 						data: { apiKey: apiKey }
 					});
 				}
-				
+
 				function back() {
 					vscode.postMessage({ type: 'back' });
 				}
