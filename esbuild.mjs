@@ -38,7 +38,7 @@ async function main() {
     sourcesContent: false,
     platform: 'node',
     outfile: 'dist/extension.js',
-    external: ['vscode', 'ws'],
+    external: ['vscode'],
     logLevel: 'silent',
     plugins: [
       esbuildProblemMatcherPlugin,

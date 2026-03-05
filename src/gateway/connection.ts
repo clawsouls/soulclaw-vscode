@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import * as WebSocket from 'ws';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const WebSocket = require('ws');
 
 function log(msg: string) {
 	try {
