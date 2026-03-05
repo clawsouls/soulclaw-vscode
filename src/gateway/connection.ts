@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const WebSocket = require('ws');
 
@@ -15,17 +16,24 @@ export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'error' | 'd
 export interface GatewayMessage {
 	type: string;
 	data?: any;
-	sessionId?: string;
-	timestamp?: number;
+	event?: string;
+	payload?: any;
+	id?: string;
+	ok?: boolean;
+	error?: any;
+	method?: string;
+	params?: any;
+	seq?: number;
 }
 
 export class GatewayConnection {
-	private ws: WebSocket | null = null;
+	private ws: any = null;
 	private state: ConnectionState = 'idle';
 	private readonly onStateChangedEmitter = new vscode.EventEmitter<ConnectionState>();
 	private readonly onMessageEmitter = new vscode.EventEmitter<GatewayMessage>();
 	private reconnectTimer: NodeJS.Timeout | null = null;
 	private pingTimer: NodeJS.Timeout | null = null;
+	private pendingRequests = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void }>();
 	
 	public readonly onStateChanged = this.onStateChangedEmitter.event;
 	public readonly onMessage = this.onMessageEmitter.event;
@@ -56,34 +64,21 @@ export class GatewayConnection {
 		
 		try {
 			const baseUrl = vscode.workspace.getConfiguration('clawsouls').get('gatewayUrl', 'ws://127.0.0.1:18789');
-			const sep = baseUrl.includes('?') ? '&' : '?';
-			const gatewayUrl = this.token ? `${baseUrl}${sep}auth=${this.token}` : baseUrl;
 			
 			log(`WS connecting to: ${baseUrl} (token: ${this.token ? 'yes' : 'no'})`);
 			
-			this.ws = new WebSocket(gatewayUrl);
+			this.ws = new WebSocket(baseUrl);
 			
 			this.ws.on('open', () => {
-				log('WebSocket connected!');
-				this.setState('connected');
-				this.startPing();
-				
-				// Send initial handshake
-				this.sendMessage({
-					type: 'handshake',
-					data: {
-						client: 'clawsouls-vscode',
-						version: '0.1.0'
-					}
-				});
+				log('WebSocket open — waiting for connect.challenge...');
 			});
 			
-			this.ws.on('message', (data) => {
+			this.ws.on('message', (data: Buffer) => {
 				try {
-					const message: GatewayMessage = JSON.parse(data.toString());
-					this.onMessageEmitter.fire(message);
+					const msg = JSON.parse(data.toString());
+					this.handleFrame(msg);
 				} catch (error) {
-					console.error('Failed to parse Gateway message:', error);
+					log(`Failed to parse Gateway message: ${error}`);
 				}
 			});
 			
@@ -91,6 +86,7 @@ export class GatewayConnection {
 				log(`WebSocket closed: code=${code} reason=${reason?.toString()}`);
 				this.setState('disconnected');
 				this.stopPing();
+				this.rejectAll(new Error(`WebSocket closed: ${code}`));
 				this.scheduleReconnect();
 			});
 			
@@ -98,6 +94,7 @@ export class GatewayConnection {
 				log(`WebSocket error: ${error.message}`);
 				this.setState('error');
 				this.stopPing();
+				this.rejectAll(error);
 				this.scheduleReconnect();
 			});
 			
@@ -107,10 +104,94 @@ export class GatewayConnection {
 			this.scheduleReconnect();
 		}
 	}
-	
+
+	private handleFrame(msg: any): void {
+		if (msg.type === 'event') {
+			if (msg.event === 'connect.challenge') {
+				const nonce = msg.payload?.nonce;
+				log(`Got connect.challenge (nonce: ${nonce ? 'yes' : 'no'})`);
+				this.sendConnectRequest(nonce);
+				return;
+			}
+			// Forward other events
+			this.onMessageEmitter.fire(msg);
+			return;
+		}
+
+		if (msg.type === 'res') {
+			const pending = this.pendingRequests.get(msg.id);
+			if (pending) {
+				this.pendingRequests.delete(msg.id);
+				if (msg.ok) {
+					pending.resolve(msg.payload);
+				} else {
+					pending.reject(new Error(msg.error?.message || 'Request failed'));
+				}
+			}
+			return;
+		}
+
+		// Forward anything else
+		this.onMessageEmitter.fire(msg);
+	}
+
+	private async sendConnectRequest(nonce?: string): Promise<void> {
+		const params: any = {
+			minProtocol: 3,
+			maxProtocol: 3,
+			client: {
+				id: 'gateway-client',
+				displayName: 'ClawSouls Agent (VSCode)',
+				version: '0.1.0',
+				platform: process.platform,
+				mode: 'ui'
+			},
+			caps: [],
+			auth: this.token ? { token: this.token } : undefined,
+			role: 'operator',
+			scopes: ['operator.admin']
+		};
+
+		try {
+			const hello = await this.request('connect', params);
+			log(`Connected! Gateway hello received.`);
+			this.setState('connected');
+			this.startPing();
+		} catch (err: any) {
+			log(`Connect request failed: ${err.message}`);
+			this.ws?.close(1008, 'connect failed');
+		}
+	}
+
+	private request(method: string, params?: any): Promise<any> {
+		return new Promise((resolve, reject) => {
+			if (!this.ws || this.ws.readyState !== 1 /* OPEN */) {
+				reject(new Error('WebSocket not open'));
+				return;
+			}
+			const id = crypto.randomUUID();
+			const frame = {
+				type: 'req',
+				id,
+				method,
+				params
+			};
+			this.pendingRequests.set(id, { resolve, reject });
+			this.ws.send(JSON.stringify(frame));
+		});
+	}
+
+	private rejectAll(err: Error): void {
+		for (const [, p] of this.pendingRequests) {
+			p.reject(err);
+		}
+		this.pendingRequests.clear();
+	}
+
 	public disconnect(): void {
 		this.clearReconnectTimer();
 		this.stopPing();
+		this.rejectAll(new Error('Disconnected'));
 		
 		if (this.ws) {
 			this.ws.close();
@@ -122,27 +203,27 @@ export class GatewayConnection {
 	
 	public async restart(): Promise<void> {
 		vscode.window.showInformationMessage('Restarting Gateway...');
-		
 		this.disconnect();
-		
-		// Give it a moment to clean up
 		await new Promise(resolve => setTimeout(resolve, 1000));
-		
 		await this.connect();
 	}
 	
 	public sendMessage(message: GatewayMessage): void {
 		if (this.ws && this.state === 'connected') {
-			const messageWithTimestamp = {
-				...message,
-				timestamp: Date.now()
-			};
-			this.ws.send(JSON.stringify(messageWithTimestamp));
+			this.ws.send(JSON.stringify(message));
 		} else {
-			console.warn('Cannot send message: Gateway not connected');
+			log('Cannot send message: Gateway not connected');
 			vscode.window.showWarningMessage('Gateway not connected. Trying to reconnect...');
 			this.connect();
 		}
+	}
+
+	/** Send a chat message to the gateway */
+	public async sendChat(text: string, sessionKey?: string): Promise<any> {
+		return this.request('chat.send', {
+			message: text,
+			...(sessionKey ? { sessionKey } : {})
+		});
 	}
 	
 	private setState(newState: ConnectionState): void {
@@ -155,15 +236,14 @@ export class GatewayConnection {
 	private scheduleReconnect(): void {
 		this.clearReconnectTimer();
 		
-		// Only auto-reconnect if autoConnect is enabled
 		const config = vscode.workspace.getConfiguration('clawsouls');
 		if (config.get('autoConnect', true)) {
 			this.reconnectTimer = setTimeout(() => {
 				if (this.state !== 'connected') {
-					console.log('Attempting to reconnect to Gateway...');
+					log('Attempting to reconnect to Gateway...');
 					this.connect();
 				}
-			}, 5000); // Retry every 5 seconds
+			}, 5000);
 		}
 	}
 	
@@ -179,7 +259,7 @@ export class GatewayConnection {
 			if (this.ws && this.state === 'connected') {
 				this.ws.ping();
 			}
-		}, 30000); // Ping every 30 seconds
+		}, 30000);
 	}
 	
 	private stopPing(): void {
