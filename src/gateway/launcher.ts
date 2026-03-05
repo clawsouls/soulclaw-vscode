@@ -269,7 +269,8 @@ export class GatewayLauncher {
 				NO_COLOR: '1',
 				CI: '1',
 				OPENCLAW_NON_INTERACTIVE: '1',
-				OPENCLAW_STATE_DIR: stateDir
+				OPENCLAW_STATE_DIR: stateDir,
+				OPENCLAW_AGENT_DIR: path.join(stateDir, 'agents', 'main', 'agent')
 			};
 			if (llmApiKey) {
 				if (llmProvider === 'openai') {
