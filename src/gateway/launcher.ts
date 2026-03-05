@@ -1,16 +1,22 @@
 import * as vscode from 'vscode';
 import { spawn, ChildProcess, execSync } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
 import { outputChannel } from '../extension';
+
+const OPENCLAW_VERSION = '2026.2.9';
 
 export class GatewayLauncher {
 	private process: ChildProcess | null = null;
 	private port: number;
+	private storagePath: string;
 
 	constructor(private context: vscode.ExtensionContext) {
 		const config = vscode.workspace.getConfiguration('clawsouls');
 		const url = config.get('gatewayUrl', 'ws://127.0.0.1:18789');
 		const match = url.match(/:(\d+)$/);
 		this.port = match ? parseInt(match[1]) : 18789;
+		this.storagePath = context.globalStorageUri.fsPath;
 	}
 
 	public async ensureRunning(): Promise<boolean> {
@@ -20,72 +26,102 @@ export class GatewayLauncher {
 			return true;
 		}
 
-		// Find openclaw binary
-		const openclawPath = this.findOpenclaw();
-		if (!openclawPath) {
-			const choice = await vscode.window.showWarningMessage(
-				'OpenClaw not found. Install it to enable the AI agent.',
-				'Install Guide',
-				'Skip'
-			);
-			if (choice === 'Install Guide') {
-				vscode.env.openExternal(vscode.Uri.parse('https://docs.openclaw.ai'));
-			}
+		// Ensure OpenClaw is installed in extension storage
+		const openclawBin = await this.ensureInstalled();
+		if (!openclawBin) {
 			return false;
 		}
 
-		outputChannel.appendLine(`Found OpenClaw at: ${openclawPath}`);
-		return await this.startGateway(openclawPath);
+		return await this.startGateway(openclawBin);
 	}
 
-	private findOpenclaw(): string | null {
-		try {
-			// Check PATH
-			const result = execSync('which openclaw 2>/dev/null || where openclaw 2>nul', {
-				encoding: 'utf-8',
-				timeout: 5000
-			}).trim();
-			if (result) return result.split('\n')[0];
-		} catch {}
+	/**
+	 * Install OpenClaw into extension's globalStorage (contained, no system pollution).
+	 * Path: ~/.vscode/globalStorage/clawsouls.clawsouls-agent/openclaw/
+	 */
+	private async ensureInstalled(): Promise<string | null> {
+		const openclawDir = path.join(this.storagePath, 'openclaw');
+		const isWin = process.platform === 'win32';
+		const binPath = isWin
+			? path.join(openclawDir, 'node_modules', '.bin', 'openclaw.cmd')
+			: path.join(openclawDir, 'node_modules', '.bin', 'openclaw');
 
-		// Common install locations
-		const paths = [
-			'/usr/local/bin/openclaw',
-			'/opt/homebrew/bin/openclaw',
-			`${process.env.HOME}/.nvm/versions/node/v24.13.0/bin/openclaw`,
-			`${process.env.HOME}/.local/bin/openclaw`,
-			`${process.env.APPDATA || ''}/npm/openclaw.cmd`,
-		];
-
-		for (const p of paths) {
+		// Check if already installed with correct version
+		if (fs.existsSync(binPath)) {
 			try {
-				execSync(`test -f "${p}" 2>/dev/null || dir "${p}" 2>nul`, { timeout: 2000 });
-				return p;
-			} catch {}
+				const ver = execSync(`"${binPath}" --version`, { encoding: 'utf-8', timeout: 5000 }).trim();
+				if (ver.includes(OPENCLAW_VERSION)) {
+					outputChannel.appendLine(`OpenClaw ${OPENCLAW_VERSION} ready (contained)`);
+					return binPath;
+				}
+				outputChannel.appendLine(`OpenClaw version mismatch (${ver}), updating...`);
+			} catch {
+				outputChannel.appendLine('OpenClaw binary check failed, reinstalling...');
+			}
 		}
 
-		// Try npx
-		try {
-			execSync('npx --yes openclaw --version', { encoding: 'utf-8', timeout: 10000 });
-			return 'npx openclaw';
-		} catch {}
+		// Install OpenClaw into contained directory
+		return await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: 'ClawSouls Agent',
+			cancellable: false
+		}, async (progress) => {
+			progress.report({ message: 'Installing OpenClaw runtime...' });
 
-		return null;
+			try {
+				// Create directory
+				fs.mkdirSync(openclawDir, { recursive: true });
+
+				// Create minimal package.json
+				const pkg = { name: 'clawsouls-agent-runtime', version: '1.0.0', private: true };
+				fs.writeFileSync(path.join(openclawDir, 'package.json'), JSON.stringify(pkg));
+
+				// Find npm
+				const npmCmd = isWin ? 'npm.cmd' : 'npm';
+
+				outputChannel.appendLine(`Installing openclaw@${OPENCLAW_VERSION} into ${openclawDir}...`);
+
+				// Install OpenClaw
+				execSync(
+					`${npmCmd} install openclaw@${OPENCLAW_VERSION} --no-save --prefer-offline`,
+					{
+						cwd: openclawDir,
+						encoding: 'utf-8',
+						timeout: 120000,
+						env: { ...process.env },
+						stdio: ['ignore', 'pipe', 'pipe']
+					}
+				);
+
+				if (fs.existsSync(binPath)) {
+					outputChannel.appendLine(`OpenClaw ${OPENCLAW_VERSION} installed successfully`);
+					progress.report({ message: 'OpenClaw ready!' });
+					return binPath;
+				} else {
+					outputChannel.appendLine('OpenClaw binary not found after install');
+					return null;
+				}
+			} catch (err: any) {
+				outputChannel.appendLine(`OpenClaw install failed: ${err.message}`);
+				vscode.window.showErrorMessage(
+					`Failed to install OpenClaw runtime. Check OUTPUT panel for details.`
+				);
+				return null;
+			}
+		});
 	}
 
-	private async startGateway(openclawPath: string): Promise<boolean> {
+	private async startGateway(openclawBin: string): Promise<boolean> {
 		return new Promise((resolve) => {
-			outputChannel.appendLine(`Starting OpenClaw Gateway on port ${this.port}...`);
+			outputChannel.appendLine(`Starting Gateway on port ${this.port}...`);
 
-			const isNpx = openclawPath.startsWith('npx');
-			const cmd = isNpx ? 'npx' : openclawPath;
-			const args = isNpx
-				? ['openclaw', 'gateway', 'start', '--port', String(this.port)]
-				: ['gateway', 'start', '--port', String(this.port)];
+			const isWin = process.platform === 'win32';
+			const cmd = isWin ? `"${openclawBin}"` : openclawBin;
 
-			this.process = spawn(cmd, args, {
+			this.process = spawn(cmd, ['gateway', 'start', '--port', String(this.port)], {
 				stdio: ['ignore', 'pipe', 'pipe'],
 				detached: false,
+				shell: isWin,
 				env: { ...process.env }
 			});
 
@@ -111,18 +147,18 @@ export class GatewayLauncher {
 			});
 
 			this.process.on('exit', (code) => {
-				outputChannel.appendLine(`Gateway process exited (code: ${code})`);
+				outputChannel.appendLine(`Gateway exited (code: ${code})`);
 				this.process = null;
 				if (!started) resolve(false);
 			});
 
-			// Give it time to start, then try connecting anyway
+			// Timeout — try connecting anyway
 			setTimeout(() => {
 				if (!started) {
-					outputChannel.appendLine('Gateway start timeout — attempting connection anyway');
+					outputChannel.appendLine('Gateway start timeout — attempting connection');
 					resolve(true);
 				}
-			}, 5000);
+			}, 8000);
 		});
 	}
 
@@ -131,24 +167,16 @@ export class GatewayLauncher {
 			const net = require('net');
 			const socket = new net.Socket();
 			socket.setTimeout(1000);
-			socket.on('connect', () => {
-				socket.destroy();
-				resolve(true);
-			});
-			socket.on('timeout', () => {
-				socket.destroy();
-				resolve(false);
-			});
-			socket.on('error', () => {
-				resolve(false);
-			});
+			socket.on('connect', () => { socket.destroy(); resolve(true); });
+			socket.on('timeout', () => { socket.destroy(); resolve(false); });
+			socket.on('error', () => { resolve(false); });
 			socket.connect(this.port, '127.0.0.1');
 		});
 	}
 
 	public stop(): void {
 		if (this.process) {
-			outputChannel.appendLine('Stopping Gateway process...');
+			outputChannel.appendLine('Stopping Gateway...');
 			this.process.kill('SIGTERM');
 			this.process = null;
 		}
