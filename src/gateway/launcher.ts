@@ -26,6 +26,26 @@ export class GatewayLauncher {
 			return true;
 		}
 
+		// Check Node.js version (OpenClaw requires Node 22+)
+		try {
+			const nodeVer = execSync('node --version', { encoding: 'utf-8', timeout: 5000 }).trim();
+			outputChannel.appendLine(`Node.js version: ${nodeVer}`);
+			const major = parseInt(nodeVer.replace('v', '').split('.')[0]);
+			if (major < 22) {
+				const choice = await vscode.window.showErrorMessage(
+					`OpenClaw requires Node.js 22+. You have ${nodeVer}. Please upgrade Node.js.`,
+					'Download Node.js'
+				);
+				if (choice === 'Download Node.js') {
+					vscode.env.openExternal(vscode.Uri.parse('https://nodejs.org/'));
+				}
+				return false;
+			}
+		} catch {
+			vscode.window.showErrorMessage('Node.js not found. OpenClaw requires Node.js 22+.');
+			return false;
+		}
+
 		// Ensure OpenClaw is installed in extension storage
 		const openclawBin = await this.ensureInstalled();
 		if (!openclawBin) {
