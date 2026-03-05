@@ -35,6 +35,14 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('clawsouls.openChat', () => chatPanel?.show()),
 		vscode.commands.registerCommand('clawsouls.restartGateway', () => gatewayConnection?.restart()),
+		vscode.commands.registerCommand('clawsouls.connect', async () => {
+			if (gatewayLauncher?.gatewayToken) {
+				gatewayConnection?.setToken(gatewayLauncher.gatewayToken);
+			}
+			outputChannel.appendLine('Manual connect triggered');
+			gatewayConnection?.disconnect();
+			await gatewayConnection?.connect();
+		}),
 		vscode.commands.registerCommand('clawsouls.refresh', () => {}),
 		vscode.commands.registerCommand('clawsouls.initSwarm', () => vscode.window.showInformationMessage('Swarm init - Coming soon!')),
 		vscode.commands.registerCommand('clawsouls.joinAgent', () => vscode.window.showInformationMessage('Join agent - Coming soon!')),

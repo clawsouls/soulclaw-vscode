@@ -114,6 +114,10 @@
         "command": "clawsouls.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "clawsouls.connect",
+        "title": "ClawSouls: Connect to Gateway"
       }
     ],
     "menus": {

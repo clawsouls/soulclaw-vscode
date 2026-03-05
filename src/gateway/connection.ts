@@ -50,12 +50,13 @@ export class GatewayConnection {
 			const sep = baseUrl.includes('?') ? '&' : '?';
 			const gatewayUrl = this.token ? `${baseUrl}${sep}auth=${this.token}` : baseUrl;
 			
-			console.log(`Connecting to OpenClaw Gateway at ${baseUrl}`);
+			const { outputChannel } = await import('../extension');
+			outputChannel?.appendLine(`WS connecting to: ${baseUrl} (token: ${this.token ? 'yes' : 'no'})`);
 			
 			this.ws = new WebSocket(gatewayUrl);
 			
 			this.ws.on('open', () => {
-				console.log('Connected to OpenClaw Gateway');
+				outputChannel?.appendLine('WebSocket connected!');
 				this.setState('connected');
 				this.startPing();
 				
@@ -78,15 +79,15 @@ export class GatewayConnection {
 				}
 			});
 			
-			this.ws.on('close', () => {
-				console.log('Gateway connection closed');
+			this.ws.on('close', (code: number, reason: Buffer) => {
+				outputChannel?.appendLine(`WebSocket closed: code=${code} reason=${reason?.toString()}`);
 				this.setState('disconnected');
 				this.stopPing();
 				this.scheduleReconnect();
 			});
 			
-			this.ws.on('error', (error) => {
-				console.error('Gateway connection error:', error);
+			this.ws.on('error', (error: Error) => {
+				outputChannel?.appendLine(`WebSocket error: ${error.message}`);
 				this.setState('error');
 				this.stopPing();
 				this.scheduleReconnect();

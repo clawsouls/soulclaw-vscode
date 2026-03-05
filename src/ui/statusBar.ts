@@ -107,17 +107,17 @@ export class StatusBarManager {
 				break;
 				
 			case 'error':
-				this.connectionStatusItem.text = '🔴 error';
+				this.connectionStatusItem.text = '🔴 error — click to connect';
 				this.connectionStatusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-				this.connectionStatusItem.command = 'clawsouls.restartGateway';
-				this.connectionStatusItem.tooltip = 'Gateway error - click to restart';
+				this.connectionStatusItem.command = 'clawsouls.connect';
+				this.connectionStatusItem.tooltip = 'Gateway error - click to connect';
 				break;
 				
 			case 'disconnected':
-				this.connectionStatusItem.text = '⚪ disconnected';
+				this.connectionStatusItem.text = '⚪ disconnected — click to connect';
 				this.connectionStatusItem.backgroundColor = undefined;
-				this.connectionStatusItem.command = 'clawsouls.restartGateway';
-				this.connectionStatusItem.tooltip = 'Gateway disconnected - click to reconnect';
+				this.connectionStatusItem.command = 'clawsouls.connect';
+				this.connectionStatusItem.tooltip = 'Gateway disconnected - click to connect';
 				break;
 		}
 	}
