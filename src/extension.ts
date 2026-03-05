@@ -24,17 +24,19 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Register ALL commands first — before anything that might throw
 	context.subscriptions.push(
 		vscode.commands.registerCommand('clawsouls.setup', async () => {
+			// Stop everything cleanly
 			if (gatewayConnection?.currentState === 'connected' || gatewayConnection?.currentState === 'connecting') {
 				gatewayConnection.disconnect();
-				outputChannel.appendLine('Gateway disconnected for setup');
 			}
 			if (gatewayLauncher?.isRunning()) {
 				gatewayLauncher.stop();
-				outputChannel.appendLine('Gateway process stopped for setup');
 			}
-			await setupWizard();
-			// Restart gateway after setup completes
-			outputChannel.appendLine('Setup complete — restarting Gateway...');
+			outputChannel.appendLine('Gateway stopped for setup');
+			// Wait for port to free
+			await new Promise(r => setTimeout(r, 2000));
+			
+			const result = await setupWizard();
+			outputChannel.appendLine(`Setup ${result.completed ? 'completed' : 'cancelled'} — starting Gateway...`);
 			await restartGateway();
 		}),
 		vscode.commands.registerCommand('clawsouls.openChat', () => chatPanel?.show()),
@@ -77,11 +79,13 @@ export async function activate(context: vscode.ExtensionContext) {
 			treeDataProvider: soulExplorerProvider
 		});
 
-		// Show setup wizard on first run (before gateway launch so config is ready)
+		// First run: show setup wizard, wait for completion, then start gateway
 		const hasSetup = context.globalState.get('hasSetup', false);
 		if (!hasSetup) {
-			await setupWizard();
+			outputChannel.appendLine('First run — opening setup wizard...');
+			const result = await setupWizard();
 			context.globalState.update('hasSetup', true);
+			outputChannel.appendLine(`Setup ${result.completed ? 'completed' : 'skipped'} — starting Gateway...`);
 		}
 
 		// Launch gateway and connect

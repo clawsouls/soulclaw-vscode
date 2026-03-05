@@ -1,45 +1,58 @@
 import * as vscode from 'vscode';
 
-export async function setupWizard(): Promise<void> {
-	const panel = vscode.window.createWebviewPanel(
-		'clawsoulsSetup',
-		'ClawSouls Setup',
-		vscode.ViewColumn.One,
-		{
-			enableScripts: true,
-			retainContextWhenHidden: true
-		}
-	);
+export function setupWizard(): Promise<{ completed: boolean }> {
+	return new Promise((resolve) => {
+		const panel = vscode.window.createWebviewPanel(
+			'clawsoulsSetup',
+			'ClawSouls Setup',
+			vscode.ViewColumn.One,
+			{
+				enableScripts: true,
+				retainContextWhenHidden: true
+			}
+		);
 
-	let currentStep = 1;
-	const maxSteps = 5;
-	let selectedProvider = '';
+		let currentStep = 1;
+		const maxSteps = 5;
+		let selectedProvider = '';
+		let finished = false;
 
-	panel.webview.onDidReceiveMessage(async (message) => {
-		switch (message.type) {
-			case 'next':
-				if (currentStep === 1 && message.data?.provider) {
-					selectedProvider = message.data.provider;
-				}
-				await handleNextStep(panel, message.data, currentStep);
-				currentStep++;
-				updateWebviewContent(panel, currentStep, selectedProvider);
-				break;
-			case 'back':
-				currentStep--;
-				updateWebviewContent(panel, currentStep, selectedProvider);
-				break;
-			case 'finish':
-				await finishSetup(panel, message.data);
-				panel.dispose();
-				break;
-			case 'skip':
-				panel.dispose();
-				break;
-		}
+		panel.onDidDispose(() => {
+			if (!finished) {
+				resolve({ completed: false });
+			}
+		});
+
+		panel.webview.onDidReceiveMessage(async (message) => {
+			switch (message.type) {
+				case 'next':
+					if (currentStep === 1 && message.data?.provider) {
+						selectedProvider = message.data.provider;
+					}
+					await handleNextStep(panel, message.data, currentStep);
+					currentStep++;
+					updateWebviewContent(panel, currentStep, selectedProvider);
+					break;
+				case 'back':
+					currentStep--;
+					updateWebviewContent(panel, currentStep, selectedProvider);
+					break;
+				case 'finish':
+					finished = true;
+					await finishSetup(panel, message.data);
+					panel.dispose();
+					resolve({ completed: true });
+					break;
+				case 'skip':
+					finished = true;
+					panel.dispose();
+					resolve({ completed: true });
+					break;
+			}
+		});
+
+		updateWebviewContent(panel, currentStep);
 	});
-
-	updateWebviewContent(panel, currentStep);
 }
 
 async function handleNextStep(panel: vscode.WebviewPanel, data: any, step: number): Promise<void> {
