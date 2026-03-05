@@ -83,7 +83,7 @@ export class GatewayLauncher {
 
 				// Install OpenClaw
 				execSync(
-					`${npmCmd} install openclaw@${OPENCLAW_VERSION} --no-save --prefer-offline`,
+					`${npmCmd} install openclaw@${OPENCLAW_VERSION} --no-save --legacy-peer-deps`,
 					{
 						cwd: openclawDir,
 						encoding: 'utf-8',
