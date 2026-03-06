@@ -26,7 +26,6 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onView:clawsouls.chat",
     "onView:clawsouls.soulExplorer",
     "onView:clawsouls.swarm",
     "onView:clawsouls.checkpoints",
@@ -50,11 +49,6 @@
     },
     "views": {
       "clawsouls-agent": [
-        {
-          "id": "clawsouls.chat",
-          "name": "\ud83d\udcac Chat",
-          "type": "webview"
-        },
         {
           "id": "clawsouls.soulExplorer",
           "name": "\ud83d\udce6 Soul Explorer"
