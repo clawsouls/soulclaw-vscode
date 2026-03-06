@@ -6,6 +6,7 @@ import { StatusBarManager } from './ui/statusBar';
 import { WorkspaceTracker } from './context/workspaceTracker';
 import { CheckpointProvider } from './ui/checkpointPanel';
 import { SwarmProvider } from './ui/swarmPanel';
+import { ChatHistoryProvider } from './ui/chatHistoryPanel';
 import { setupWizard } from './commands/setup';
 import { GatewayLauncher } from './gateway/launcher';
 
@@ -102,6 +103,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		const statusBar = new StatusBarManager(context, gatewayConnection);
 		
 		// Initialize Soul Explorer
+		// Initialize Chat History panel
+		const chatHistoryProvider = new ChatHistoryProvider(context);
+		vscode.window.createTreeView('clawsouls.chatHistory', {
+			treeDataProvider: chatHistoryProvider
+		});
+
 		const soulExplorerProvider = new SoulExplorerProvider(context);
 		vscode.window.createTreeView('clawsouls.soulExplorer', {
 			treeDataProvider: soulExplorerProvider

@@ -154,6 +154,12 @@ export class ChatPanel {
 			case 'insertFile':
 				this.insertFileIntoChat(message.path);
 				break;
+			case 'clearChat':
+				this.clearChat();
+				break;
+			case 'switchHistory':
+				this.switchHistory();
+				break;
 		}
 	}
 	
@@ -336,10 +342,14 @@ export class ChatPanel {
 				<link rel="stylesheet" href="${this.getMediaUri('chat.css')}">
 			</head>
 			<body>
-				<div class="header">
+				<div class="header" style="display:flex;justify-content:space-between;align-items:center;">
 					<div class="status">
 						<span class="status-indicator" style="background-color: ${statusColor}"></span>
 						Gateway: ${gatewayStatus}
+					</div>
+					<div style="display:flex;gap:8px;">
+						<button id="clearBtn" title="Clear Chat" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--vscode-foreground);opacity:0.7;padding:2px 6px;">🗑️ Clear</button>
+						<button id="historyBtn" title="Switch Chat History" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--vscode-foreground);opacity:0.7;padding:2px 6px;">📋 History</button>
 					</div>
 				</div>
 				
@@ -364,6 +374,14 @@ export class ChatPanel {
 					const sendButton = document.getElementById('sendButton');
 					const messagesContainer = document.getElementById('messages');
 					const dragDropArea = document.getElementById('dragDropArea');
+					
+					// Clear & History buttons
+					document.getElementById('clearBtn').addEventListener('click', () => {
+						vscode.postMessage({ type: 'clearChat' });
+					});
+					document.getElementById('historyBtn').addEventListener('click', () => {
+						vscode.postMessage({ type: 'switchHistory' });
+					});
 					
 					// Send message
 					function sendMessage() {

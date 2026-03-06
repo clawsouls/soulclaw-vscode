@@ -50,6 +50,10 @@
     "views": {
       "clawsouls-agent": [
         {
+          "id": "clawsouls.chatHistory",
+          "name": "💬 Chat History"
+        },
+        {
           "id": "clawsouls.soulExplorer",
           "name": "\ud83d\udce6 Soul Explorer"
         },
@@ -108,6 +112,15 @@
       {
         "command": "clawsouls.clearChat",
         "title": "ClawSouls: Clear Chat"
+      },
+      {
+        "command": "clawsouls.openChatHistory",
+        "title": "Open Chat History"
+      },
+      {
+        "command": "clawsouls.deleteChatHistory",
+        "title": "Delete Chat History",
+        "icon": "$(trash)"
       },
       {
         "command": "clawsouls.switchHistory",
@@ -207,6 +220,11 @@
           "command": "clawsouls.checkpoint.delete",
           "when": "viewItem == checkpoint",
           "group": "context"
+        },
+        {
+          "command": "clawsouls.deleteChatHistory",
+          "when": "viewItem == chatHistory",
+          "group": "inline"
         }
       ]
     },
