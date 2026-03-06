@@ -14,6 +14,13 @@ export class ChatPanel {
 	) {
 		// Listen for Gateway messages
 		this.gateway.onMessage(this.handleGatewayMessage.bind(this));
+		
+		// Listen for connection state changes
+		this.gateway.onStateChanged((state) => {
+			if (this.panel) {
+				this.panel.webview.postMessage({ type: 'stateUpdate', state });
+			}
+		});
 	}
 	
 	public show(): void {
@@ -334,6 +341,14 @@ export class ChatPanel {
 						if (message.type === 'clearStream') {
 							const streamEl = document.getElementById('streaming');
 							if (streamEl) streamEl.remove();
+						}
+						if (message.type === 'stateUpdate') {
+							const statusEl = document.querySelector('.status');
+							if (statusEl) {
+								const colors = { connected: '#00ff00', connecting: '#ffff00', error: '#ff0000' };
+								const color = colors[message.state] || '#888888';
+								statusEl.innerHTML = '<span class="status-indicator" style="background-color: ' + color + '"></span> Gateway: ' + message.state;
+							}
 						}
 					});
 				</script>
