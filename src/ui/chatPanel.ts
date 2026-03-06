@@ -26,6 +26,8 @@ export class ChatPanel {
 	public show(): void {
 		if (this.panel) {
 			this.panel.reveal();
+			// Re-send current state on reveal
+			this.panel.webview.postMessage({ type: 'stateUpdate', state: this.gateway.currentState });
 			return;
 		}
 		
@@ -345,7 +347,7 @@ export class ChatPanel {
 						if (message.type === 'stateUpdate') {
 							const statusEl = document.querySelector('.status');
 							if (statusEl) {
-								const colors = { connected: '#00ff00', connecting: '#ffff00', error: '#ff0000' };
+								const colors = { connected: '#00ff00', connecting: '#ffff00', error: '#ff0000', disconnected: '#888888', idle: '#888888' };
 								const color = colors[message.state] || '#888888';
 								statusEl.innerHTML = '<span class="status-indicator" style="background-color: ' + color + '"></span> Gateway: ' + message.state;
 							}
