@@ -84,9 +84,9 @@ export class StatusBarManager {
 	}
 	
 	private updateStatusBar(): void {
-		// Update soul status
-		const currentSoul = this.getCurrentSoulName();
-		this.soulStatusItem.text = `🔮 ${currentSoul}`;
+		// Update soul status (async — will update text when ready)
+		this.soulStatusItem.text = '🔮 Loading...';
+		this.refreshSoulName();
 		
 		// Update agent status
 		const currentAgent = this.getCurrentAgentName();
@@ -138,31 +138,41 @@ export class StatusBarManager {
 		}
 	}
 	
-	private getCurrentSoulName(): string {
-		this.refreshSoulName();
-		return 'No Soul';
-	}
-	
-	private async refreshSoulName(): Promise<void> {
+	private refreshSoulName(): void {
 		const workspaces = vscode.workspace.workspaceFolders;
-		if (!workspaces || workspaces.length === 0) return;
-		
-		try {
-			const fs = await import('fs');
-			const path = await import('path');
-			const soulJsonPath = path.join(workspaces[0].uri.fsPath, 'soul.json');
-			
-			if (fs.existsSync(soulJsonPath)) {
-				const data = fs.readFileSync(soulJsonPath, 'utf8');
-				const soulConfig = JSON.parse(data);
-				const name = soulConfig.displayName || soulConfig.name || 'Unknown';
-				this.soulStatusItem.text = `🔮 ${name}`;
-			} else {
-				this.soulStatusItem.text = '🔮 No Soul';
-			}
-		} catch {
+		if (!workspaces || workspaces.length === 0) {
 			this.soulStatusItem.text = '🔮 No Soul';
+			return;
 		}
+
+		const fs = require('fs');
+		const path = require('path');
+
+		// Check workspace root and .clawsouls/ subdirs
+		const roots = [workspaces[0].uri.fsPath];
+		const clawsoulsDir = path.join(workspaces[0].uri.fsPath, '.clawsouls');
+		if (fs.existsSync(clawsoulsDir)) {
+			try {
+				const entries = fs.readdirSync(clawsoulsDir, { withFileTypes: true });
+				for (const e of entries) {
+					if (e.isDirectory()) roots.push(path.join(clawsoulsDir, e.name));
+				}
+			} catch {}
+		}
+
+		for (const root of roots) {
+			const soulJsonPath = path.join(root, 'soul.json');
+			try {
+				if (fs.existsSync(soulJsonPath)) {
+					const data = fs.readFileSync(soulJsonPath, 'utf8');
+					const soulConfig = JSON.parse(data);
+					const name = soulConfig.displayName || soulConfig.name || 'Unknown';
+					this.soulStatusItem.text = `🔮 ${name}`;
+					return;
+				}
+			} catch {}
+		}
+		this.soulStatusItem.text = '🔮 No Soul';
 	}
 	
 	private getCurrentAgentName(): string {

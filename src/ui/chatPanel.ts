@@ -7,11 +7,19 @@ import { workspaceTracker } from '../extension';
 export class ChatPanel {
 	private panel: vscode.WebviewPanel | null = null;
 	private messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp: number }> = [];
+	private static readonly HISTORY_KEY = 'clawsouls.chatHistory';
+	private static readonly MAX_HISTORY = 200;
 	
 	constructor(
 		private context: vscode.ExtensionContext,
 		private gateway: GatewayConnection
 	) {
+		// Restore persisted messages
+		const saved = this.context.globalState.get<typeof this.messages>(ChatPanel.HISTORY_KEY);
+		if (saved && Array.isArray(saved)) {
+			this.messages = saved.slice(-ChatPanel.MAX_HISTORY);
+		}
+
 		// Listen for Gateway messages
 		this.gateway.onMessage(this.handleGatewayMessage.bind(this));
 		
@@ -56,6 +64,11 @@ export class ChatPanel {
 	public addMessage(role: 'user' | 'assistant', content: string): void {
 		const msg = { role, content, timestamp: Date.now() };
 		this.messages.push(msg);
+		// Keep bounded and persist
+		if (this.messages.length > ChatPanel.MAX_HISTORY) {
+			this.messages = this.messages.slice(-ChatPanel.MAX_HISTORY);
+		}
+		this.context.globalState.update(ChatPanel.HISTORY_KEY, this.messages);
 		
 		if (this.panel) {
 			// Clear streaming indicator before updating
