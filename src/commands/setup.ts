@@ -62,6 +62,8 @@ async function handleNextStep(panel: vscode.WebviewPanel, data: any, step: numbe
 		switch (step) {
 			case 1:
 				await config.update('llmProvider', data.provider, vscode.ConfigurationTarget.Global);
+				// Reset model when switching providers to avoid cross-contamination
+				await config.update('llmModel', '', vscode.ConfigurationTarget.Global);
 				break;
 			case 2:
 				if (data.apiKey) {
