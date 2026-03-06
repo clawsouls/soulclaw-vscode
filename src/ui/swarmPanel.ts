@@ -211,7 +211,8 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 
 		const terminal = vscode.window.createTerminal('ClawSouls Swarm');
 		terminal.show();
-		terminal.sendText(`cd "${memDir}" && npx clawsouls ${command}`);
+		const sep = process.platform === 'win32' ? ';' : '&&';
+		terminal.sendText(`cd "${memDir}" ${sep} npx clawsouls ${command}`);
 	}
 }
 
