@@ -4,6 +4,8 @@ import { ChatPanel } from './ui/chatPanel';
 import { SoulExplorerProvider } from './ui/soulExplorer';
 import { StatusBarManager } from './ui/statusBar';
 import { WorkspaceTracker } from './context/workspaceTracker';
+import { CheckpointProvider } from './ui/checkpointPanel';
+import { SwarmProvider } from './ui/swarmPanel';
 import { setupWizard } from './commands/setup';
 import { GatewayLauncher } from './gateway/launcher';
 
@@ -50,13 +52,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			await gatewayConnection?.connect();
 		}),
 		// clawsouls.refresh is registered by SoulExplorerProvider
-		vscode.commands.registerCommand('clawsouls.initSwarm', () => vscode.window.showInformationMessage('Swarm init - Coming soon!')),
-		vscode.commands.registerCommand('clawsouls.joinAgent', () => vscode.window.showInformationMessage('Join agent - Coming soon!')),
-		vscode.commands.registerCommand('clawsouls.pushChanges', () => vscode.window.showInformationMessage('Push changes - Coming soon!')),
-		vscode.commands.registerCommand('clawsouls.pullLatest', () => vscode.window.showInformationMessage('Pull latest - Coming soon!')),
-		vscode.commands.registerCommand('clawsouls.mergeBranches', () => vscode.window.showInformationMessage('Merge branches - Coming soon!')),
-		vscode.commands.registerCommand('clawsouls.runScan', () => vscode.window.showInformationMessage('Run scan - Coming soon!')),
-		vscode.commands.registerCommand('clawsouls.createCheckpoint', () => vscode.window.showInformationMessage('Create checkpoint - Coming soon!'))
+		vscode.commands.registerCommand('clawsouls.runScan', () => vscode.window.showInformationMessage('Run scan - Coming soon!'))
+		// clawsouls.initSwarm, joinAgent, pushChanges, pullLatest, mergeBranches → SwarmProvider
+		// clawsouls.createCheckpoint → CheckpointProvider
 	);
 	outputChannel.appendLine('Commands registered');
 
@@ -77,6 +75,18 @@ export async function activate(context: vscode.ExtensionContext) {
 		const soulExplorerProvider = new SoulExplorerProvider(context);
 		vscode.window.createTreeView('clawsouls.soulExplorer', {
 			treeDataProvider: soulExplorerProvider
+		});
+
+		// Initialize Swarm panel
+		const swarmProvider = new SwarmProvider(context);
+		vscode.window.createTreeView('clawsouls.swarm', {
+			treeDataProvider: swarmProvider
+		});
+
+		// Initialize Checkpoint panel
+		const checkpointProvider = new CheckpointProvider(context);
+		vscode.window.createTreeView('clawsouls.checkpoints', {
+			treeDataProvider: checkpointProvider
 		});
 
 		// First run: show setup wizard, wait for completion, then start gateway

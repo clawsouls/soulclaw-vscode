@@ -135,6 +135,25 @@
         "title": "Preview Soul"
       },
       {
+        "command": "clawsouls.checkpoint.restore",
+        "title": "Restore Checkpoint",
+        "icon": "$(debug-reverse-continue)"
+      },
+      {
+        "command": "clawsouls.checkpoint.delete",
+        "title": "Delete Checkpoint",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "clawsouls.checkpoint.diff",
+        "title": "Diff with Current",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "clawsouls.swarm.switchBranch",
+        "title": "Switch Branch"
+      },
+      {
         "command": "clawsouls.connect",
         "title": "ClawSouls: Connect to Gateway"
       }
@@ -162,6 +181,21 @@
           "command": "clawsouls.soulExplorer.apply",
           "when": "viewItem == remoteSoul",
           "group": "inline"
+        },
+        {
+          "command": "clawsouls.checkpoint.restore",
+          "when": "viewItem == checkpoint",
+          "group": "inline@1"
+        },
+        {
+          "command": "clawsouls.checkpoint.diff",
+          "when": "viewItem == checkpoint",
+          "group": "inline@2"
+        },
+        {
+          "command": "clawsouls.checkpoint.delete",
+          "when": "viewItem == checkpoint",
+          "group": "context"
         }
       ]
     },
