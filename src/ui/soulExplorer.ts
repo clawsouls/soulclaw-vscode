@@ -205,15 +205,27 @@ ${scan}
 </html>`;
 	}
 
+	private getOpenClawWorkspaceDir(): string {
+		// Resolve OpenClaw workspace directory
+		const stateDir = process.env.OPENCLAW_STATE_DIR;
+		if (stateDir) {
+			return path.join(stateDir, 'workspace');
+		}
+		const home = process.env.HOME || process.env.USERPROFILE || '';
+		return path.join(home, '.openclaw', 'workspace');
+	}
+
 	private async applySoul(node: RemoteSoulNode): Promise<void> {
 		const soul = node.soul;
 		const workspaces = vscode.workspace.workspaceFolders;
-		if (!workspaces || workspaces.length === 0) {
-			vscode.window.showWarningMessage('Open a workspace folder first.');
-			return;
-		}
 
-		const targetDir = workspaces[0].uri.fsPath;
+		// Write to both: VSCode workspace (if open) + OpenClaw workspace
+		const openclawDir = this.getOpenClawWorkspaceDir();
+		const targetDirs: string[] = [openclawDir];
+		if (workspaces && workspaces.length > 0) {
+			targetDirs.push(workspaces[0].uri.fsPath);
+		}
+		const targetDir = workspaces?.[0]?.uri.fsPath || openclawDir;
 		const confirm = await vscode.window.showInformationMessage(
 			`Apply "${soul.displayName}" to workspace? This will download soul files to ${targetDir}.`,
 			'Apply', 'Cancel'
@@ -224,59 +236,61 @@ ${scan}
 			// Fetch full soul detail
 			const detail = await apiGet(`/souls/${soul.owner}/${soul.name}`);
 
-			// Download and write each file
-			const fileEntries = Object.entries(detail.files || {}) as [string, string][];
-			if (fileEntries.length === 0) {
-				// At minimum create soul.json
-				const soulJson = {
-					name: detail.name,
-					displayName: detail.displayName,
-					description: detail.description,
-					version: detail.version,
-					specVersion: '0.5',
-					license: detail.license,
-					tags: detail.tags,
-					category: detail.category,
-					author: detail.author
-				};
-				const soulJsonPath = path.join(targetDir, 'soul.json');
-				fs.writeFileSync(soulJsonPath, JSON.stringify(soulJson, null, 2));
-			}
+			const soulJson = {
+				name: detail.name,
+				displayName: detail.displayName,
+				description: detail.description,
+				version: detail.version,
+				specVersion: '0.5',
+				license: detail.license,
+				tags: detail.tags,
+				category: detail.category,
+				author: detail.author,
+				files: detail.files
+			};
 
-			// Try to download files via the soul's file content API
+			// Download file contents
+			const fileContents: Record<string, string> = {};
+			const fileEntries = Object.entries(detail.files || {}) as [string, string][];
 			for (const [key, filename] of fileEntries) {
 				try {
 					const content = await apiGet(`/souls/${soul.owner}/${soul.name}/files/${filename}`);
-					const filePath = path.join(targetDir, filename as string);
 					if (typeof content === 'string') {
-						fs.writeFileSync(filePath, content);
+						fileContents[filename] = content;
 					} else if (content?.content) {
-						fs.writeFileSync(filePath, content.content);
+						fileContents[filename] = content.content;
 					}
 				} catch {
-					// File content API might not exist — create placeholder
 					console.log(`Could not download ${filename}, skipping`);
 				}
 			}
 
-			// Always create/update soul.json
-			const soulJsonPath = path.join(targetDir, 'soul.json');
-			if (!fs.existsSync(soulJsonPath)) {
-				const soulJson = {
-					name: detail.name,
-					displayName: detail.displayName,
-					description: detail.description,
-					version: detail.version,
-					specVersion: '0.5',
-					license: detail.license,
-					tags: detail.tags,
-					category: detail.category,
-					author: detail.author
-				};
-				fs.writeFileSync(soulJsonPath, JSON.stringify(soulJson, null, 2));
+			// Write to all target directories (VSCode workspace + OpenClaw workspace)
+			for (const dir of targetDirs) {
+				fs.mkdirSync(dir, { recursive: true });
+
+				// Write soul.json
+				fs.writeFileSync(path.join(dir, 'soul.json'), JSON.stringify(soulJson, null, 2));
+
+				// Write downloaded files
+				for (const [filename, content] of Object.entries(fileContents)) {
+					fs.writeFileSync(path.join(dir, filename), content);
+				}
 			}
 
-			vscode.window.showInformationMessage(`✅ Soul "${soul.displayName}" applied to workspace.`);
+			// Add .clawsouls to .gitignore if workspace has one
+			if (workspaces && workspaces.length > 0) {
+				const gitignorePath = path.join(workspaces[0].uri.fsPath, '.gitignore');
+				if (fs.existsSync(gitignorePath)) {
+					const content = fs.readFileSync(gitignorePath, 'utf8');
+					if (!content.includes('.clawsouls/')) {
+						fs.appendFileSync(gitignorePath, '\n.clawsouls/\n');
+					}
+				}
+			}
+
+			const dirs = targetDirs.map(d => path.basename(path.dirname(d)) + '/' + path.basename(d)).join(', ');
+			vscode.window.showInformationMessage(`✅ Soul "${soul.displayName}" applied. (${targetDirs.length} locations)`);
 			this.refresh();
 		} catch (err: any) {
 			vscode.window.showErrorMessage(`Failed to apply soul: ${err.message}`);
