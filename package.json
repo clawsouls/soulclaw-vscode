@@ -55,7 +55,8 @@
         },
         {
           "id": "clawsouls.swarm",
-          "name": "\ud83d\udc1d Swarm"
+          "name": "Swarm Memory",
+          "icon": "media/swarm-icon.png"
         },
         {
           "id": "clawsouls.checkpoints",
@@ -74,7 +75,7 @@
       },
       {
         "command": "clawsouls.initSwarm",
-        "title": "ClawSouls: Init Swarm"
+        "title": "ClawSouls: Init Swarm Memory"
       },
       {
         "command": "clawsouls.joinAgent",
@@ -273,7 +274,7 @@
       },
       {
         "view": "clawsouls.swarm",
-        "contents": "Swarm not initialized.\n[Initialize Swarm](command:clawsouls.initSwarm)"
+        "contents": "Swarm Memory not initialized.\n[Initialize Swarm Memory](command:clawsouls.initSwarm)"
       },
       {
         "view": "clawsouls.checkpoints",

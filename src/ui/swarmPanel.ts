@@ -44,7 +44,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 
 		if (!this.initialized) {
 			return [
-				new SwarmActionNode('Initialize Swarm', 'clawsouls.initSwarm', 'rocket'),
+				new SwarmActionNode('Initialize Swarm Memory', 'clawsouls.initSwarm', 'rocket'),
 			];
 		}
 
@@ -135,7 +135,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			vscode.window.showInformationMessage('✅ Swarm Memory initialized.');
 			this.refresh();
 		} catch (err: any) {
-			vscode.window.showErrorMessage(`Swarm init failed: ${err.message}`);
+			vscode.window.showErrorMessage(`Swarm Memory init failed: ${err.message}`);
 		}
 	}
 
