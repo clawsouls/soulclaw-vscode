@@ -139,25 +139,32 @@ export class StatusBarManager {
 	}
 	
 	private refreshSoulName(): void {
-		const workspaces = vscode.workspace.workspaceFolders;
-		if (!workspaces || workspaces.length === 0) {
-			this.soulStatusItem.text = '🔮 No Soul';
-			return;
-		}
-
 		const fs = require('fs');
 		const path = require('path');
 
-		// Check workspace root and .clawsouls/ subdirs
-		const roots = [workspaces[0].uri.fsPath];
-		const clawsoulsDir = path.join(workspaces[0].uri.fsPath, '.clawsouls');
-		if (fs.existsSync(clawsoulsDir)) {
-			try {
-				const entries = fs.readdirSync(clawsoulsDir, { withFileTypes: true });
-				for (const e of entries) {
-					if (e.isDirectory()) roots.push(path.join(clawsoulsDir, e.name));
-				}
-			} catch {}
+		// Check: OpenClaw workspace, VSCode workspace root, .clawsouls/ subdirs
+		const roots: string[] = [];
+
+		// OpenClaw workspace (where soul apply writes)
+		const stateDir = process.env.OPENCLAW_STATE_DIR;
+		const openclawWs = stateDir
+			? path.join(stateDir, 'workspace')
+			: path.join(process.env.HOME || process.env.USERPROFILE || '', '.openclaw', 'workspace');
+		roots.push(openclawWs);
+
+		// VSCode workspace
+		const workspaces = vscode.workspace.workspaceFolders;
+		if (workspaces && workspaces.length > 0) {
+			roots.push(workspaces[0].uri.fsPath);
+			const clawsoulsDir = path.join(workspaces[0].uri.fsPath, '.clawsouls');
+			if (fs.existsSync(clawsoulsDir)) {
+				try {
+					const entries = fs.readdirSync(clawsoulsDir, { withFileTypes: true });
+					for (const e of entries) {
+						if (e.isDirectory()) roots.push(path.join(clawsoulsDir, e.name));
+					}
+				} catch {}
+			}
 		}
 
 		for (const root of roots) {
