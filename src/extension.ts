@@ -49,7 +49,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			gatewayConnection?.disconnect();
 			await gatewayConnection?.connect();
 		}),
-		vscode.commands.registerCommand('clawsouls.refresh', () => {}),
+		// clawsouls.refresh is registered by SoulExplorerProvider
 		vscode.commands.registerCommand('clawsouls.initSwarm', () => vscode.window.showInformationMessage('Swarm init - Coming soon!')),
 		vscode.commands.registerCommand('clawsouls.joinAgent', () => vscode.window.showInformationMessage('Join agent - Coming soon!')),
 		vscode.commands.registerCommand('clawsouls.pushChanges', () => vscode.window.showInformationMessage('Push changes - Coming soon!')),

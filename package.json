@@ -116,6 +116,25 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "clawsouls.soulExplorer.search",
+        "title": "ClawSouls: Search Souls",
+        "icon": "$(search)"
+      },
+      {
+        "command": "clawsouls.soulExplorer.toggleView",
+        "title": "ClawSouls: Toggle Local/Browse",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "clawsouls.soulExplorer.apply",
+        "title": "Apply Soul to Workspace",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "clawsouls.soulExplorer.preview",
+        "title": "Preview Soul"
+      },
+      {
         "command": "clawsouls.connect",
         "title": "ClawSouls: Connect to Gateway"
       }
@@ -123,9 +142,26 @@
     "menus": {
       "view/title": [
         {
+          "command": "clawsouls.soulExplorer.search",
+          "when": "view == clawsouls.soulExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "clawsouls.soulExplorer.toggleView",
+          "when": "view == clawsouls.soulExplorer",
+          "group": "navigation@2"
+        },
+        {
           "command": "clawsouls.refresh",
           "when": "view == clawsouls.soulExplorer || view == clawsouls.swarm || view == clawsouls.checkpoints",
-          "group": "navigation"
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "clawsouls.soulExplorer.apply",
+          "when": "viewItem == remoteSoul",
+          "group": "inline"
         }
       ]
     },

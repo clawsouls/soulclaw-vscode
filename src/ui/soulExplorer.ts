@@ -1,172 +1,392 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as https from 'https';
 
-export class SoulExplorerProvider implements vscode.TreeDataProvider<SoulFile> {
-	private _onDidChangeTreeData: vscode.EventEmitter<SoulFile | undefined | null | void> = new vscode.EventEmitter<SoulFile | undefined | null | void>();
-	readonly onDidChangeTreeData: vscode.Event<SoulFile | undefined | null | void> = this._onDidChangeTreeData.event;
-	
+const API_BASE = 'https://clawsouls.ai/api/v1';
+
+interface SoulSummary {
+	name: string;
+	owner: string;
+	fullName: string;
+	displayName: string;
+	description: string;
+	category: string;
+	tags: string[];
+	downloads: number;
+	scanScore: number | null;
+	scanStatus: string;
+	version: string;
+	license: string;
+	files: Record<string, string>;
+}
+
+function apiGet(urlPath: string): Promise<any> {
+	return new Promise((resolve, reject) => {
+		const url = `${API_BASE}${urlPath}`;
+		https.get(url, { headers: { 'Accept': 'application/json' } }, (res) => {
+			let data = '';
+			res.on('data', (chunk: string) => data += chunk);
+			res.on('end', () => {
+				try { resolve(JSON.parse(data)); }
+				catch { reject(new Error(`Invalid JSON from ${url}`)); }
+			});
+		}).on('error', reject);
+	});
+}
+
+type TreeNode = CategoryNode | RemoteSoulNode | LocalSoulFile;
+
+export class SoulExplorerProvider implements vscode.TreeDataProvider<TreeNode> {
+	private _onDidChangeTreeData = new vscode.EventEmitter<TreeNode | undefined | null | void>();
+	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+	private remoteCache: SoulSummary[] = [];
+	private searchQuery = '';
+	private viewMode: 'browse' | 'local' = 'browse';
+
 	constructor(private context: vscode.ExtensionContext) {
-		// Watch for file changes
-		const fileWatcher = vscode.workspace.createFileSystemWatcher('**/{soul.json,SOUL.md,AGENTS.md,MEMORY.md,IDENTITY.md}');
-		fileWatcher.onDidChange(() => this.refresh());
-		fileWatcher.onDidCreate(() => this.refresh());
-		fileWatcher.onDidDelete(() => this.refresh());
-		
-		context.subscriptions.push(fileWatcher);
+		// Watch local soul files
+		const watcher = vscode.workspace.createFileSystemWatcher('**/{soul.json,SOUL.md,AGENTS.md,MEMORY.md,IDENTITY.md}');
+		watcher.onDidChange(() => this.refresh());
+		watcher.onDidCreate(() => this.refresh());
+		watcher.onDidDelete(() => this.refresh());
+		context.subscriptions.push(watcher);
+
+		// Register soul explorer commands
+		context.subscriptions.push(
+			vscode.commands.registerCommand('clawsouls.soulExplorer.search', () => this.searchSouls()),
+			vscode.commands.registerCommand('clawsouls.soulExplorer.toggleView', () => this.toggleView()),
+			vscode.commands.registerCommand('clawsouls.soulExplorer.apply', (node: RemoteSoulNode) => this.applySoul(node)),
+			vscode.commands.registerCommand('clawsouls.soulExplorer.preview', (node: RemoteSoulNode) => this.previewSoul(node)),
+			vscode.commands.registerCommand('clawsouls.refresh', () => this.refresh())
+		);
+
+		// Load remote souls on init
+		this.loadRemoteSouls();
 	}
-	
+
 	refresh(): void {
 		this._onDidChangeTreeData.fire();
 	}
-	
-	getTreeItem(element: SoulFile): vscode.TreeItem {
+
+	getTreeItem(element: TreeNode): vscode.TreeItem {
 		return element;
 	}
-	
-	getChildren(element?: SoulFile): Thenable<SoulFile[]> {
+
+	async getChildren(element?: TreeNode): Promise<TreeNode[]> {
 		if (!element) {
-			// Root level - scan workspace for soul files
-			return Promise.resolve(this.getSoulFiles());
+			return this.getRootChildren();
 		}
-		
-		return Promise.resolve([]);
+		if (element instanceof CategoryNode) {
+			return element.children;
+		}
+		return [];
 	}
-	
-	private async getSoulFiles(): Promise<SoulFile[]> {
+
+	private async getRootChildren(): Promise<TreeNode[]> {
+		if (this.viewMode === 'local') {
+			return this.getLocalFiles();
+		}
+
+		// Browse mode — group by category
+		let souls = this.remoteCache;
+		if (this.searchQuery) {
+			const q = this.searchQuery.toLowerCase();
+			souls = souls.filter(s =>
+				s.displayName.toLowerCase().includes(q) ||
+				s.description.toLowerCase().includes(q) ||
+				s.tags.some(t => t.toLowerCase().includes(q)) ||
+				s.fullName.toLowerCase().includes(q)
+			);
+		}
+
+		if (souls.length === 0) {
+			if (this.remoteCache.length === 0) {
+				return [new MessageNode('Loading souls...')];
+			}
+			return [new MessageNode(`No results for "${this.searchQuery}"`)];
+		}
+
+		// Group by category
+		const groups = new Map<string, RemoteSoulNode[]>();
+		for (const soul of souls) {
+			const cat = soul.category || 'uncategorized';
+			if (!groups.has(cat)) groups.set(cat, []);
+			groups.get(cat)!.push(new RemoteSoulNode(soul));
+		}
+
+		const categories: CategoryNode[] = [];
+		for (const [cat, children] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+			categories.push(new CategoryNode(cat, children));
+		}
+		return categories;
+	}
+
+	private async loadRemoteSouls(): Promise<void> {
+		try {
+			const resp = await apiGet('/souls?limit=200');
+			this.remoteCache = resp.souls || [];
+			this.refresh();
+		} catch (err: any) {
+			console.error('Failed to load remote souls:', err.message);
+			// Retry after 10s
+			setTimeout(() => this.loadRemoteSouls(), 10000);
+		}
+	}
+
+	private async searchSouls(): Promise<void> {
+		const query = await vscode.window.showInputBox({
+			prompt: 'Search souls by name, tag, or description',
+			placeHolder: 'e.g. developer, writing, korean...',
+			value: this.searchQuery
+		});
+		if (query !== undefined) {
+			this.searchQuery = query;
+			this.viewMode = 'browse';
+			this.refresh();
+		}
+	}
+
+	private toggleView(): void {
+		this.viewMode = this.viewMode === 'browse' ? 'local' : 'browse';
+		this.refresh();
+	}
+
+	private async previewSoul(node: RemoteSoulNode): Promise<void> {
+		const soul = node.soul;
+		try {
+			const detail = await apiGet(`/souls/${soul.owner}/${soul.name}`);
+			const panel = vscode.window.createWebviewPanel(
+				'soulPreview',
+				`${soul.displayName} — Soul Preview`,
+				vscode.ViewColumn.One,
+				{ enableScripts: false }
+			);
+			panel.webview.html = this.getSoulPreviewHtml(detail);
+		} catch (err: any) {
+			vscode.window.showErrorMessage(`Failed to load soul: ${err.message}`);
+		}
+	}
+
+	private getSoulPreviewHtml(soul: any): string {
+		const tags = (soul.tags || []).map((t: string) => `<span class="tag">${t}</span>`).join(' ');
+		const files = Object.entries(soul.files || {}).map(([k, v]) => `<li><b>${k}</b>: ${v}</li>`).join('');
+		const scan = soul.latestScan
+			? `<p>🔍 SoulScan: <b>${soul.latestScan.score}/100</b> (${soul.latestScan.status})</p>`
+			: '';
+
+		return `<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: var(--vscode-font-family); padding: 20px; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
+h1 { margin-bottom: 4px; }
+.meta { color: var(--vscode-descriptionForeground); margin-bottom: 16px; }
+.tag { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-right: 4px; }
+.section { margin-top: 16px; }
+.btn { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>${soul.displayName || soul.name}</h1>
+<p class="meta">${soul.fullName} · v${soul.version} · ${soul.license} · ⬇ ${soul.downloads}</p>
+<p>${soul.description || ''}</p>
+<div>${tags}</div>
+${scan}
+<div class="section">
+<h3>📁 Files</h3>
+<ul>${files || '<li>No files</li>'}</ul>
+</div>
+<div class="section">
+<p>To apply this soul, use the command: <b>ClawSouls: Apply Soul</b></p>
+</div>
+</body>
+</html>`;
+	}
+
+	private async applySoul(node: RemoteSoulNode): Promise<void> {
+		const soul = node.soul;
 		const workspaces = vscode.workspace.workspaceFolders;
-		if (!workspaces) {
-			return [];
+		if (!workspaces || workspaces.length === 0) {
+			vscode.window.showWarningMessage('Open a workspace folder first.');
+			return;
 		}
-		
-		const soulFiles: SoulFile[] = [];
-		
-		for (const workspace of workspaces) {
-			const files = await this.findSoulFilesInDir(workspace.uri.fsPath);
-			soulFiles.push(...files);
+
+		const targetDir = workspaces[0].uri.fsPath;
+		const confirm = await vscode.window.showInformationMessage(
+			`Apply "${soul.displayName}" to workspace? This will download soul files to ${targetDir}.`,
+			'Apply', 'Cancel'
+		);
+		if (confirm !== 'Apply') return;
+
+		try {
+			// Fetch full soul detail
+			const detail = await apiGet(`/souls/${soul.owner}/${soul.name}`);
+
+			// Download and write each file
+			const fileEntries = Object.entries(detail.files || {}) as [string, string][];
+			if (fileEntries.length === 0) {
+				// At minimum create soul.json
+				const soulJson = {
+					name: detail.name,
+					displayName: detail.displayName,
+					description: detail.description,
+					version: detail.version,
+					specVersion: '0.5',
+					license: detail.license,
+					tags: detail.tags,
+					category: detail.category,
+					author: detail.author
+				};
+				const soulJsonPath = path.join(targetDir, 'soul.json');
+				fs.writeFileSync(soulJsonPath, JSON.stringify(soulJson, null, 2));
+			}
+
+			// Try to download files via the soul's file content API
+			for (const [key, filename] of fileEntries) {
+				try {
+					const content = await apiGet(`/souls/${soul.owner}/${soul.name}/files/${filename}`);
+					const filePath = path.join(targetDir, filename as string);
+					if (typeof content === 'string') {
+						fs.writeFileSync(filePath, content);
+					} else if (content?.content) {
+						fs.writeFileSync(filePath, content.content);
+					}
+				} catch {
+					// File content API might not exist — create placeholder
+					console.log(`Could not download ${filename}, skipping`);
+				}
+			}
+
+			// Always create/update soul.json
+			const soulJsonPath = path.join(targetDir, 'soul.json');
+			if (!fs.existsSync(soulJsonPath)) {
+				const soulJson = {
+					name: detail.name,
+					displayName: detail.displayName,
+					description: detail.description,
+					version: detail.version,
+					specVersion: '0.5',
+					license: detail.license,
+					tags: detail.tags,
+					category: detail.category,
+					author: detail.author
+				};
+				fs.writeFileSync(soulJsonPath, JSON.stringify(soulJson, null, 2));
+			}
+
+			vscode.window.showInformationMessage(`✅ Soul "${soul.displayName}" applied to workspace.`);
+			this.refresh();
+		} catch (err: any) {
+			vscode.window.showErrorMessage(`Failed to apply soul: ${err.message}`);
 		}
-		
-		return soulFiles.sort((a, b) => a.label.localeCompare(b.label));
 	}
-	
-	private async findSoulFilesInDir(dirPath: string): Promise<SoulFile[]> {
-		const soulFiles: SoulFile[] = [];
+
+	private async getLocalFiles(): Promise<LocalSoulFile[]> {
+		const workspaces = vscode.workspace.workspaceFolders;
+		if (!workspaces) return [];
+
+		const files: LocalSoulFile[] = [];
+		for (const ws of workspaces) {
+			const found = this.findLocalSoulFiles(ws.uri.fsPath);
+			files.push(...found);
+		}
+		return files.sort((a, b) => (a.label as string).localeCompare(b.label as string));
+	}
+
+	private findLocalSoulFiles(dirPath: string): LocalSoulFile[] {
+		const results: LocalSoulFile[] = [];
 		const filenames = ['soul.json', 'SOUL.md', 'AGENTS.md', 'MEMORY.md', 'IDENTITY.md'];
-		
+
 		for (const filename of filenames) {
 			const filePath = path.join(dirPath, filename);
-			
 			if (fs.existsSync(filePath)) {
-				const stats = fs.statSync(filePath);
-				const soulFile = new SoulFile(
-					filename,
-					vscode.TreeItemCollapsibleState.None,
-					filePath,
-					this.getSoulFileType(filename),
-					stats.mtime
-				);
-				
-				// Add commands for each file
-				soulFile.command = {
-					command: 'vscode.open',
-					title: 'Open',
-					arguments: [vscode.Uri.file(filePath)]
-				};
-				
-				soulFiles.push(soulFile);
+				results.push(new LocalSoulFile(filename, filePath));
 			}
 		}
-		
-		// Also scan subdirectories for soul files
+
 		try {
 			const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 			for (const entry of entries) {
 				if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
-					const subDirPath = path.join(dirPath, entry.name);
-					const subFiles = await this.findSoulFilesInDir(subDirPath);
-					
-					// Prefix with directory name for clarity
-					subFiles.forEach(file => {
-						file.label = `${entry.name}/${file.label}`;
-						file.tooltip = `${entry.name}/${file.tooltip}`;
+					const sub = this.findLocalSoulFiles(path.join(dirPath, entry.name));
+					sub.forEach(f => {
+						f.label = `${entry.name}/${f.label}`;
 					});
-					
-					soulFiles.push(...subFiles);
+					results.push(...sub);
 				}
 			}
-		} catch (error) {
-			// Ignore permission errors
-		}
-		
-		return soulFiles;
-	}
-	
-	private getSoulFileType(filename: string): SoulFileType {
-		switch (filename.toLowerCase()) {
-			case 'soul.json': return SoulFileType.Config;
-			case 'soul.md': return SoulFileType.Persona;
-			case 'agents.md': return SoulFileType.Agents;
-			case 'memory.md': return SoulFileType.Memory;
-			case 'identity.md': return SoulFileType.Identity;
-			default: return SoulFileType.Unknown;
-		}
+		} catch {}
+
+		return results;
 	}
 }
 
-enum SoulFileType {
-	Config = 'config',
-	Persona = 'persona',
-	Agents = 'agents',
-	Memory = 'memory',
-	Identity = 'identity',
-	Unknown = 'unknown'
-}
-
-class SoulFile extends vscode.TreeItem {
+class CategoryNode extends vscode.TreeItem {
 	constructor(
-		public readonly label: string,
-		public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-		public readonly filePath: string,
-		public readonly fileType: SoulFileType,
-		public readonly lastModified: Date,
-		public command?: vscode.Command
+		public readonly categoryName: string,
+		public readonly children: RemoteSoulNode[]
 	) {
-		super(label, collapsibleState);
-		
-		this.tooltip = `${this.label} - Modified: ${this.lastModified.toLocaleString()}`;
-		this.description = this.getDescription();
-		this.iconPath = this.getIcon();
+		super(categoryName, vscode.TreeItemCollapsibleState.Collapsed);
+		this.description = `${children.length}`;
+		this.iconPath = new vscode.ThemeIcon('folder');
+		this.contextValue = 'category';
 	}
-	
-	private getDescription(): string {
-		const size = this.getFileSize();
-		return size ? `${size}` : '';
+}
+
+class RemoteSoulNode extends vscode.TreeItem {
+	constructor(public readonly soul: SoulSummary) {
+		super(soul.displayName || soul.name, vscode.TreeItemCollapsibleState.None);
+
+		const scanIcon = soul.scanStatus === 'pass' ? '✅' : soul.scanStatus === 'warn' ? '⚠️' : '❌';
+		this.description = `${soul.fullName} · ⬇${soul.downloads} ${scanIcon}`;
+		this.tooltip = `${soul.description}\n\nTags: ${soul.tags.join(', ')}\nVersion: ${soul.version}\nScan: ${soul.scanScore ?? '-'}/100`;
+		this.iconPath = new vscode.ThemeIcon('person');
+		this.contextValue = 'remoteSoul';
+
+		this.command = {
+			command: 'clawsouls.soulExplorer.preview',
+			title: 'Preview Soul',
+			arguments: [this]
+		};
 	}
-	
-	private getFileSize(): string | null {
+}
+
+class LocalSoulFile extends vscode.TreeItem {
+	constructor(
+		public label: string,
+		public readonly filePath: string
+	) {
+		super(label, vscode.TreeItemCollapsibleState.None);
+
+		const icon = label.toLowerCase() === 'soul.json' ? 'settings-gear'
+			: label.toLowerCase() === 'soul.md' ? 'person'
+			: label.toLowerCase() === 'agents.md' ? 'organization'
+			: label.toLowerCase() === 'memory.md' ? 'database'
+			: label.toLowerCase() === 'identity.md' ? 'key'
+			: 'file';
+
+		this.iconPath = new vscode.ThemeIcon(icon);
+		this.contextValue = 'localSoulFile';
+
 		try {
-			const stats = fs.statSync(this.filePath);
-			const sizeKB = Math.round(stats.size / 1024);
-			return sizeKB > 0 ? `${sizeKB}KB` : `${stats.size}B`;
-		} catch {
-			return null;
-		}
+			const stats = fs.statSync(filePath);
+			const kb = Math.round(stats.size / 1024);
+			this.description = kb > 0 ? `${kb}KB` : `${stats.size}B`;
+		} catch {}
+
+		this.command = {
+			command: 'vscode.open',
+			title: 'Open',
+			arguments: [vscode.Uri.file(filePath)]
+		};
 	}
-	
-	private getIcon(): vscode.ThemeIcon {
-		switch (this.fileType) {
-			case SoulFileType.Config:
-				return new vscode.ThemeIcon('settings-gear');
-			case SoulFileType.Persona:
-				return new vscode.ThemeIcon('person');
-			case SoulFileType.Agents:
-				return new vscode.ThemeIcon('organization');
-			case SoulFileType.Memory:
-				return new vscode.ThemeIcon('database');
-			case SoulFileType.Identity:
-				return new vscode.ThemeIcon('key');
-			default:
-				return new vscode.ThemeIcon('file');
-		}
+}
+
+class MessageNode extends vscode.TreeItem {
+	constructor(message: string) {
+		super(message, vscode.TreeItemCollapsibleState.None);
+		this.iconPath = new vscode.ThemeIcon('info');
 	}
 }
