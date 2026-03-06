@@ -25,12 +25,19 @@ export class StatusBarManager {
 		// Listen for connection state changes
 		this.gateway.onStateChanged(this.onConnectionStateChanged.bind(this));
 		
+		// Watch for soul.json changes to update status bar
+		const soulWatcher = vscode.workspace.createFileSystemWatcher('**/soul.json');
+		soulWatcher.onDidChange(() => this.refreshSoulName());
+		soulWatcher.onDidCreate(() => this.refreshSoulName());
+		soulWatcher.onDidDelete(() => { this.soulStatusItem.text = '🔮 No Soul'; });
+		
 		context.subscriptions.push(
 			this.soulStatusItem,
 			this.agentStatusItem,
 			this.connectionStatusItem,
 			this.restartItem,
-			this.setupItem
+			this.setupItem,
+			soulWatcher
 		);
 	}
 	
@@ -123,29 +130,30 @@ export class StatusBarManager {
 	}
 	
 	private getCurrentSoulName(): string {
-		// Try to read soul name from workspace
+		this.refreshSoulName();
+		return 'No Soul';
+	}
+	
+	private async refreshSoulName(): Promise<void> {
 		const workspaces = vscode.workspace.workspaceFolders;
-		if (workspaces && workspaces.length > 0) {
-			try {
-				const soulJsonPath = vscode.Uri.joinPath(workspaces[0].uri, 'soul.json');
-				const content = vscode.workspace.fs.readFile(soulJsonPath);
-				content.then((data) => {
-					try {
-						const soulConfig = JSON.parse(data.toString());
-						const soulName = soulConfig.name || soulConfig.id || 'Unknown';
-						this.soulStatusItem.text = `🔮 ${soulName}`;
-					} catch (error) {
-						// Ignore parsing errors
-					}
-				}).catch(() => {
-					// File doesn't exist, use default
-				});
-			} catch (error) {
-				// Ignore file reading errors
-			}
-		}
+		if (!workspaces || workspaces.length === 0) return;
 		
-		return 'No Soul'; // Default if no soul.json found
+		try {
+			const fs = await import('fs');
+			const path = await import('path');
+			const soulJsonPath = path.join(workspaces[0].uri.fsPath, 'soul.json');
+			
+			if (fs.existsSync(soulJsonPath)) {
+				const data = fs.readFileSync(soulJsonPath, 'utf8');
+				const soulConfig = JSON.parse(data);
+				const name = soulConfig.displayName || soulConfig.name || 'Unknown';
+				this.soulStatusItem.text = `🔮 ${name}`;
+			} else {
+				this.soulStatusItem.text = '🔮 No Soul';
+			}
+		} catch {
+			this.soulStatusItem.text = '🔮 No Soul';
+		}
 	}
 	
 	private getCurrentAgentName(): string {
