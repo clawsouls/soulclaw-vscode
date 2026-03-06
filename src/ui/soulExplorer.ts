@@ -230,8 +230,8 @@ ${scan}
 		if (confirm !== 'Apply') return;
 
 		try {
-			// Fetch full soul detail
-			const detail = await apiGet(`/souls/${soul.owner}/${soul.name}`);
+			// Fetch full soul detail with file contents
+			const detail = await apiGet(`/souls/${soul.owner}/${soul.name}?files=true`);
 
 			const soulJson = {
 				name: detail.name,
@@ -246,31 +246,38 @@ ${scan}
 				files: detail.files
 			};
 
-			// Download file contents
-			const fileContents: Record<string, string> = {};
-			const fileEntries = Object.entries(detail.files || {}) as [string, string][];
-			for (const [key, filename] of fileEntries) {
-				try {
-					const content = await apiGet(`/souls/${soul.owner}/${soul.name}/files/${filename}`);
-					if (typeof content === 'string') {
-						fileContents[filename] = content;
-					} else if (content?.content) {
-						fileContents[filename] = content.content;
-					}
-				} catch {
-					console.log(`Could not download ${filename}, skipping`);
-				}
-			}
+			// Map file contents: files array = filenames, fileContents = {index: content}
+			const fileNames = Array.isArray(detail.files) ? detail.files as string[] : [];
+			const fileContentsMap = detail.fileContents || {};
 
-			// Write to all target directories (VSCode workspace + OpenClaw workspace)
+			// Filename mapping: soul→SOUL.md, identity→IDENTITY.md, etc.
+			const fileNameMap: Record<string, string> = {
+				'soul': 'SOUL.md',
+				'identity': 'IDENTITY.md',
+				'style': 'STYLE.md',
+				'agents': 'AGENTS.md',
+				'readme': 'README.md',
+				'heartbeat': 'HEARTBEAT.md',
+				'user': 'USER.md',
+				'memory': 'MEMORY.md',
+				'tools': 'TOOLS.md',
+				'bootstrap': 'BOOTSTRAP.md',
+				'soul.json': 'soul.json',  // skip, we write our own
+			};
+
+			// Write to target directories
 			for (const dir of targetDirs) {
 				fs.mkdirSync(dir, { recursive: true });
 
 				// Write soul.json
 				fs.writeFileSync(path.join(dir, 'soul.json'), JSON.stringify(soulJson, null, 2));
 
-				// Write downloaded files
-				for (const [filename, content] of Object.entries(fileContents)) {
+				// Write file contents
+				for (let i = 0; i < fileNames.length; i++) {
+					const key = fileNames[i];
+					const content = fileContentsMap[String(i)];
+					if (!content || key === 'soul.json') continue;
+					const filename = fileNameMap[key] || `${key.toUpperCase()}.md`;
 					fs.writeFileSync(path.join(dir, filename), content);
 				}
 			}
