@@ -116,6 +116,18 @@ Everything is contained — uninstalling the extension cleans up completely. No 
 | `clawsouls.autoConnect` | `true` | Auto-connect on startup |
 | `clawsouls.showStatusBar` | `true` | Show status bar items |
 
+## File Locations
+
+This extension writes files to the following locations:
+
+| OS | Extension Storage | OpenClaw Config |
+|----|-------------------|-----------------|
+| **Windows** | `C:\Users\{username}\AppData\Roaming\Code\User\globalStorage\clawsouls.clawsouls-agent\` | `C:\Users\{username}\.openclaw\` |
+| **macOS** | `~/Library/Application Support/Code/User/globalStorage/clawsouls.clawsouls-agent/` | `~/.openclaw/` |
+| **Linux** | `~/.config/Code/User/globalStorage/clawsouls.clawsouls-agent/` | `~/.openclaw/` |
+
+> ⚠️ **Note**: The extension may overwrite files in these directories. The `globalStorage` directory is managed by VSCode and cleaned up on uninstall. The `.openclaw` directory contains authentication tokens and agent configuration — it persists after uninstall.
+
 ## Disclaimer
 
 This extension is provided "as is" without warranty of any kind. It is an independent project by [ClawSouls](https://clawsouls.ai) and is **not officially affiliated with or endorsed by the OpenClaw project**. Use at your own risk. The authors are not responsible for any data loss, API charges, or other damages arising from the use of this software.
