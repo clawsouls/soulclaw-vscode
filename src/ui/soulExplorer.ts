@@ -290,8 +290,15 @@ ${scan}
 			}
 
 			const dirs = targetDirs.map(d => path.basename(path.dirname(d)) + '/' + path.basename(d)).join(', ');
-			vscode.window.showInformationMessage(`✅ Soul "${soul.displayName}" applied. (${targetDirs.length} locations)`);
+			vscode.window.showInformationMessage(`✅ Soul "${soul.displayName}" applied. Restarting gateway to load new soul...`);
 			this.refresh();
+
+			// Restart gateway so the new soul takes effect
+			try {
+				await vscode.commands.executeCommand('clawsouls.restartGateway');
+			} catch {
+				// Best effort — gateway may not be running
+			}
 		} catch (err: any) {
 			vscode.window.showErrorMessage(`Failed to apply soul: ${err.message}`);
 		}

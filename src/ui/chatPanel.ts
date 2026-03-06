@@ -54,18 +54,23 @@ export class ChatPanel {
 	}
 	
 	public addMessage(role: 'user' | 'assistant', content: string): void {
-		this.messages.push({
-			role,
-			content,
-			timestamp: Date.now()
-		});
+		const msg = { role, content, timestamp: Date.now() };
+		this.messages.push(msg);
 		
 		if (this.panel) {
 			// Clear streaming indicator before updating
 			if (role === 'assistant') {
 				this.panel.webview.postMessage({ type: 'clearStream' });
 			}
-			this.updateWebviewContent();
+			// Append single message instead of full re-render
+			const time = new Date(msg.timestamp).toLocaleTimeString();
+			const html = marked.parse(msg.content, { async: false }) as string;
+			this.panel.webview.postMessage({
+				type: 'appendMessage',
+				role: msg.role,
+				html,
+				time
+			});
 		}
 	}
 	
@@ -325,6 +330,15 @@ export class ChatPanel {
 						const message = event.data;
 						if (message.type === 'insertText') {
 							messageInput.value += message.text;
+						}
+						if (message.type === 'appendMessage') {
+							const el = document.createElement('div');
+							const roleClass = message.role === 'user' ? 'user-message' : 'assistant-message';
+							const roleIcon = message.role === 'user' ? '👤' : '🔮';
+							el.className = 'message ' + roleClass;
+							el.innerHTML = '<div class="message-header"><span class="role-icon">' + roleIcon + '</span><span class="timestamp">' + message.time + '</span></div><div class="message-content">' + message.html + '</div>';
+							messagesContainer.appendChild(el);
+							messagesContainer.scrollTop = messagesContainer.scrollHeight;
 						}
 						if (message.type === 'streamUpdate') {
 							// Show streaming response
