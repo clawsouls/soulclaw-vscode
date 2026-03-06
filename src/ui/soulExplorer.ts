@@ -219,15 +219,12 @@ ${scan}
 		const soul = node.soul;
 		const workspaces = vscode.workspace.workspaceFolders;
 
-		// Write to both: VSCode workspace (if open) + OpenClaw workspace
+		// Write to OpenClaw workspace only (gateway reads from here)
 		const openclawDir = this.getOpenClawWorkspaceDir();
 		const targetDirs: string[] = [openclawDir];
-		if (workspaces && workspaces.length > 0) {
-			targetDirs.push(workspaces[0].uri.fsPath);
-		}
-		const targetDir = workspaces?.[0]?.uri.fsPath || openclawDir;
+		const targetDir = openclawDir;
 		const confirm = await vscode.window.showInformationMessage(
-			`Apply "${soul.displayName}" to workspace? This will download soul files to ${targetDir}.`,
+			`Apply "${soul.displayName}"? Soul files will be saved to OpenClaw workspace.`,
 			'Apply', 'Cancel'
 		);
 		if (confirm !== 'Apply') return;
