@@ -71,28 +71,27 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		return ws && ws.length > 0 ? ws[0].uri.fsPath : null;
 	}
 
-	private getMemoryDir(): string | null {
-		const root = this.getWorkspaceRoot();
-		if (!root) return null;
-		const memDir = path.join(root, 'memory');
-		return fs.existsSync(memDir) ? memDir : null;
+	/** Swarm memory lives in globalStorage, isolated from the project repo */
+	private getSwarmDir(): string | null {
+		const ws = vscode.workspace.workspaceFolders;
+		if (!ws || ws.length === 0) return null;
+		const workspaceName = path.basename(ws[0].uri.fsPath);
+		return path.join(this.context.globalStorageUri.fsPath, 'swarm', workspaceName);
 	}
 
 	private detectSwarm(): void {
-		const root = this.getWorkspaceRoot();
-		if (!root) {
+		const swarmDir = this.getSwarmDir();
+		if (!swarmDir) {
 			this.initialized = false;
 			this.branches = [];
 			return;
 		}
 
-		// Check if memory/ dir has .git (swarm initialized)
-		const memDir = path.join(root, 'memory');
-		const gitDir = path.join(memDir, '.git');
+		const gitDir = path.join(swarmDir, '.git');
 		this.initialized = fs.existsSync(gitDir);
 
 		if (this.initialized) {
-			this.loadBranches(memDir);
+			this.loadBranches(swarmDir);
 		} else {
 			this.branches = [];
 		}
@@ -114,8 +113,8 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 	}
 
 	private async initSwarm(): Promise<void> {
-		const root = this.getWorkspaceRoot();
-		if (!root) {
+		const swarmDir = this.getSwarmDir();
+		if (!swarmDir) {
 			vscode.window.showWarningMessage('Open a workspace folder first.');
 			return;
 		}
@@ -126,16 +125,28 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		});
 		if (repoUrl === undefined) return;
 
-		const memDir = path.join(root, 'memory');
-		fs.mkdirSync(memDir, { recursive: true });
+		fs.mkdirSync(swarmDir, { recursive: true });
 
 		try {
 			if (repoUrl) {
-				execSync(`git clone "${repoUrl}" .`, { cwd: memDir, encoding: 'utf8' });
+				execSync(`git clone "${repoUrl}" .`, { cwd: swarmDir, encoding: 'utf8' });
 			} else {
-				execSync('git init', { cwd: memDir, encoding: 'utf8' });
+				execSync('git init', { cwd: swarmDir, encoding: 'utf8' });
+				// Create initial soul.json so CLI works
+				const ws = vscode.workspace.workspaceFolders;
+				if (ws) {
+					const srcSoul = path.join(ws[0].uri.fsPath, 'soul.json');
+					const dstSoul = path.join(swarmDir, 'soul.json');
+					if (fs.existsSync(srcSoul)) {
+						fs.copyFileSync(srcSoul, dstSoul);
+					} else {
+						fs.writeFileSync(dstSoul, JSON.stringify({ specVersion: "0.5", name: "swarm-memory" }, null, 2));
+					}
+					// Initial commit
+					execSync('git add -A && git commit -m "init swarm memory"', { cwd: swarmDir, encoding: 'utf8' });
+				}
 			}
-			vscode.window.showInformationMessage('✅ Swarm Memory initialized.');
+			vscode.window.showInformationMessage(`✅ Swarm Memory initialized at: ${swarmDir}`);
 			this.refresh();
 		} catch (err: any) {
 			vscode.window.showErrorMessage(`Swarm Memory init failed: ${err.message}`);
@@ -143,9 +154,8 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 	}
 
 	private async joinAgent(): Promise<void> {
-		const root = this.getWorkspaceRoot();
-		const memDir = root ? path.join(root, 'memory') : null;
-		if (!memDir || !this.initialized) {
+		const swarmDir = this.getSwarmDir();
+		if (!swarmDir || !this.initialized) {
 			vscode.window.showWarningMessage('Initialize swarm first.');
 			return;
 		}
@@ -157,7 +167,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		if (!branchName) return;
 
 		try {
-			execSync(`git checkout -b "${branchName}"`, { cwd: memDir, encoding: 'utf8' });
+			execSync(`git checkout -b "${branchName}"`, { cwd: swarmDir, encoding: 'utf8' });
 			vscode.window.showInformationMessage(`✅ Joined as "${branchName}".`);
 			this.refresh();
 		} catch (err: any) {
@@ -166,9 +176,8 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 	}
 
 	private async mergeBranches(): Promise<void> {
-		const root = this.getWorkspaceRoot();
-		const memDir = root ? path.join(root, 'memory') : null;
-		if (!memDir || !this.initialized) return;
+		const swarmDir = this.getSwarmDir();
+		if (!swarmDir || !this.initialized) return;
 
 		const otherBranches = this.branches.filter(b => !b.current).map(b => b.name);
 		if (otherBranches.length === 0) {
@@ -194,7 +203,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			this.runCli(`swarm merge "${picked}" --strategy llm`);
 		} else {
 			try {
-				execSync(`git merge "${picked}"`, { cwd: memDir, encoding: 'utf8' });
+				execSync(`git merge "${picked}"`, { cwd: swarmDir, encoding: 'utf8' });
 				vscode.window.showInformationMessage(`✅ Merged "${picked}" into current branch.`);
 				this.refresh();
 			} catch (err: any) {
@@ -204,12 +213,11 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 	}
 
 	private async switchBranch(node: SwarmBranchNode): Promise<void> {
-		const root = this.getWorkspaceRoot();
-		const memDir = root ? path.join(root, 'memory') : null;
-		if (!memDir) return;
+		const swarmDir = this.getSwarmDir();
+		if (!swarmDir) return;
 
 		try {
-			execSync(`git checkout "${node.branch.name}"`, { cwd: memDir, encoding: 'utf8' });
+			execSync(`git checkout "${node.branch.name}"`, { cwd: swarmDir, encoding: 'utf8' });
 			vscode.window.showInformationMessage(`Switched to "${node.branch.name}".`);
 			this.refresh();
 		} catch (err: any) {
@@ -240,9 +248,8 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 	}
 
 	private async runCli(command: string): Promise<void> {
-		const root = this.getWorkspaceRoot();
-		const memDir = root ? path.join(root, 'memory') : null;
-		if (!memDir || !this.initialized) {
+		const swarmDir = this.getSwarmDir();
+		if (!swarmDir || !this.initialized) {
 			vscode.window.showWarningMessage('Initialize swarm first.');
 			return;
 		}
@@ -250,7 +257,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		const terminal = vscode.window.createTerminal('ClawSouls Swarm');
 		terminal.show();
 		const sep = process.platform === 'win32' ? ';' : '&&';
-		terminal.sendText(`cd "${memDir}" ${sep} npx clawsouls ${command}`);
+		terminal.sendText(`cd "${swarmDir}" ${sep} npx clawsouls ${command}`);
 	}
 }
 
