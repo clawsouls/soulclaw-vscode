@@ -143,10 +143,29 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 						fs.writeFileSync(dstSoul, JSON.stringify({ specVersion: "0.5", name: "swarm-memory" }, null, 2));
 					}
 					// Initial commit
-					execSync('git add -A && git commit -m "init swarm memory"', { cwd: swarmDir, encoding: 'utf8' });
+					const sep = process.platform === 'win32' ? ';' : '&&';
+					execSync(`git add -A ${sep} git commit -m "init swarm memory"`, { cwd: swarmDir, encoding: 'utf8' });
 				}
 			}
-			vscode.window.showInformationMessage(`✅ Swarm Memory initialized at: ${swarmDir}`);
+
+			// Ask to join as agent immediately
+			const agentId = await vscode.window.showInputBox({
+				prompt: 'Agent name (creates agent/{name} branch)',
+				placeHolder: 'e.g. brad, alice, my-agent',
+				value: 'main'
+			});
+			if (agentId) {
+				const agentBranch = agentId.startsWith('agent/') ? agentId : `agent/${agentId}`;
+				try {
+					execSync(`git checkout -b "${agentBranch}"`, { cwd: swarmDir, encoding: 'utf8' });
+				} catch {
+					// Branch may already exist
+					execSync(`git checkout "${agentBranch}"`, { cwd: swarmDir, encoding: 'utf8' });
+				}
+				vscode.window.showInformationMessage(`✅ Swarm Memory initialized + joined as "${agentBranch}"`);
+			} else {
+				vscode.window.showInformationMessage(`✅ Swarm Memory initialized at: ${swarmDir}`);
+			}
 			this.refresh();
 		} catch (err: any) {
 			vscode.window.showErrorMessage(`Swarm Memory init failed: ${err.message}`);
