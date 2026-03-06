@@ -221,7 +221,22 @@ export class ChatPanel {
 	}
 	
 	private insertFileIntoChat(filePath: string): void {
-		if (this.panel) {
+		if (!this.panel) return;
+		try {
+			const fs = require('fs');
+			const pathMod = require('path');
+			const stat = fs.statSync(filePath);
+			if (stat.size > 100 * 1024) {
+				vscode.window.showWarningMessage('File too large (>100KB). Skipping.');
+				return;
+			}
+			const content = fs.readFileSync(filePath, 'utf8');
+			const filename = pathMod.basename(filePath);
+			this.panel.webview.postMessage({
+				type: 'insertText',
+				text: `📁 ${filename}:\n\`\`\`\n${content}\n\`\`\``
+			});
+		} catch {
 			this.panel.webview.postMessage({
 				type: 'insertText',
 				text: `📁 ${filePath}`

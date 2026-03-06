@@ -106,6 +106,14 @@
         "title": "ClawSouls: Restart Gateway"
       },
       {
+        "command": "clawsouls.editSoul",
+        "title": "ClawSouls: Edit Soul"
+      },
+      {
+        "command": "clawsouls.swarmKeys",
+        "title": "ClawSouls: Manage Encryption Keys"
+      },
+      {
         "command": "clawsouls.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"

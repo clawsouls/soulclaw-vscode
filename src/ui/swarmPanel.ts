@@ -20,6 +20,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 	constructor(private context: vscode.ExtensionContext) {
 		context.subscriptions.push(
 			vscode.commands.registerCommand('clawsouls.initSwarm', () => this.initSwarm()),
+			vscode.commands.registerCommand('clawsouls.swarmKeys', () => this.manageKeys()),
 			vscode.commands.registerCommand('clawsouls.pushChanges', () => this.runCli('swarm push')),
 			vscode.commands.registerCommand('clawsouls.pullLatest', () => this.runCli('swarm pull')),
 			vscode.commands.registerCommand('clawsouls.mergeBranches', () => this.mergeBranches()),
@@ -55,6 +56,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		items.push(new SwarmActionNode('⬆ Push', 'clawsouls.pushChanges', 'cloud-upload'));
 		items.push(new SwarmActionNode('⬇ Pull', 'clawsouls.pullLatest', 'cloud-download'));
 		items.push(new SwarmActionNode('🔀 Merge', 'clawsouls.mergeBranches', 'git-merge'));
+		items.push(new SwarmActionNode('🔐 Encryption Keys', 'clawsouls.swarmKeys', 'key'));
 
 		// Branches
 		for (const br of this.branches) {
@@ -179,12 +181,25 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		});
 		if (!picked) return;
 
-		try {
-			execSync(`git merge "${picked}"`, { cwd: memDir, encoding: 'utf8' });
-			vscode.window.showInformationMessage(`✅ Merged "${picked}" into current branch.`);
-			this.refresh();
-		} catch (err: any) {
-			vscode.window.showWarningMessage(`Merge conflict — resolve manually in memory/ directory.\n${err.message}`);
+		const strategy = await vscode.window.showQuickPick(
+			[
+				{ label: 'Git merge (default)', value: 'git' },
+				{ label: 'LLM semantic merge (Ollama)', value: 'llm' }
+			],
+			{ placeHolder: 'Select merge strategy' }
+		);
+		if (!strategy) return;
+
+		if (strategy.value === 'llm') {
+			this.runCli(`swarm merge "${picked}" --strategy llm`);
+		} else {
+			try {
+				execSync(`git merge "${picked}"`, { cwd: memDir, encoding: 'utf8' });
+				vscode.window.showInformationMessage(`✅ Merged "${picked}" into current branch.`);
+				this.refresh();
+			} catch (err: any) {
+				vscode.window.showWarningMessage(`Merge conflict — resolve manually or try LLM merge.\n${err.message}`);
+			}
 		}
 	}
 
@@ -199,6 +214,28 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			this.refresh();
 		} catch (err: any) {
 			vscode.window.showErrorMessage(`Switch failed: ${err.message}`);
+		}
+	}
+
+	private async manageKeys(): Promise<void> {
+		const action = await vscode.window.showQuickPick(
+			[
+				{ label: '🔑 Init keys', value: 'swarm keys init' },
+				{ label: '👁 Show public key', value: 'swarm keys show' },
+				{ label: '➕ Add recipient', value: 'swarm keys add' },
+				{ label: '📋 List recipients', value: 'swarm keys list' },
+				{ label: '🔄 Rotate keys', value: 'swarm keys rotate' },
+			],
+			{ placeHolder: 'Select encryption key action' }
+		);
+		if (!action) return;
+
+		if (action.value === 'swarm keys add') {
+			const key = await vscode.window.showInputBox({ prompt: 'Enter age public key (age1...)' });
+			if (!key) return;
+			this.runCli(`${action.value} "${key}"`);
+		} else {
+			this.runCli(action.value);
 		}
 	}
 

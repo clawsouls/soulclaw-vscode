@@ -52,7 +52,35 @@ export async function activate(context: vscode.ExtensionContext) {
 			await gatewayConnection?.connect();
 		}),
 		// clawsouls.refresh is registered by SoulExplorerProvider
-		vscode.commands.registerCommand('clawsouls.runScan', () => vscode.window.showInformationMessage('Run scan - Coming soon!'))
+		vscode.commands.registerCommand('clawsouls.runScan', async () => {
+			const ws = vscode.workspace.workspaceFolders;
+			if (!ws) { vscode.window.showWarningMessage('No workspace open'); return; }
+			const dir = ws[0].uri.fsPath;
+			const terminal = vscode.window.createTerminal({ name: 'SoulScan', cwd: dir });
+			terminal.show();
+			terminal.sendText('npx clawsouls scan');
+		}),
+		vscode.commands.registerCommand('clawsouls.editSoul', async () => {
+			const ws = vscode.workspace.workspaceFolders;
+			if (!ws) return;
+			const fs = require('fs');
+			const pathMod = require('path');
+			const soulPath = pathMod.join(ws[0].uri.fsPath, 'soul.json');
+			if (!fs.existsSync(soulPath)) {
+				const create = await vscode.window.showInformationMessage('No soul.json found. Create one?', 'Create', 'Cancel');
+				if (create !== 'Create') return;
+				fs.writeFileSync(soulPath, JSON.stringify({
+					specVersion: "0.5",
+					name: "my-soul",
+					displayName: "My Soul",
+					version: "0.1.0",
+					description: "",
+					persona: { identity: "", style: "" }
+				}, null, 2));
+			}
+			const doc = await vscode.workspace.openTextDocument(soulPath);
+			await vscode.window.showTextDocument(doc);
+		}),
 		// clawsouls.initSwarm, joinAgent, pushChanges, pullLatest, mergeBranches → SwarmProvider
 		// clawsouls.createCheckpoint → CheckpointProvider
 	);
