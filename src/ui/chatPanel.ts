@@ -7,18 +7,27 @@ import { workspaceTracker } from '../extension';
 export class ChatPanel {
 	private panel: vscode.WebviewPanel | null = null;
 	private messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp: number }> = [];
-	private static readonly HISTORY_KEY = 'clawsouls.chatHistory';
+	private static readonly HISTORY_INDEX_KEY = 'clawsouls.chatHistoryIndex';
 	private static readonly MAX_HISTORY = 200;
+	private currentWorkspaceKey: string;
 	
 	constructor(
 		private context: vscode.ExtensionContext,
 		private gateway: GatewayConnection
 	) {
-		// Restore persisted messages
-		const saved = this.context.globalState.get<typeof this.messages>(ChatPanel.HISTORY_KEY);
+		// Workspace-specific history key
+		const ws = vscode.workspace.workspaceFolders;
+		const wsName = ws && ws.length > 0 ? ws[0].name : '_no_workspace';
+		this.currentWorkspaceKey = `clawsouls.chatHistory.${wsName}`;
+
+		// Restore persisted messages for this workspace
+		const saved = this.context.globalState.get<typeof this.messages>(this.currentWorkspaceKey);
 		if (saved && Array.isArray(saved)) {
 			this.messages = saved.slice(-ChatPanel.MAX_HISTORY);
 		}
+
+		// Track this workspace in the index
+		this.updateHistoryIndex(wsName);
 
 		// Listen for Gateway messages
 		this.gateway.onMessage(this.handleGatewayMessage.bind(this));
@@ -68,7 +77,7 @@ export class ChatPanel {
 		if (this.messages.length > ChatPanel.MAX_HISTORY) {
 			this.messages = this.messages.slice(-ChatPanel.MAX_HISTORY);
 		}
-		this.context.globalState.update(ChatPanel.HISTORY_KEY, this.messages);
+		this.context.globalState.update(this.currentWorkspaceKey, this.messages);
 		
 		if (this.panel) {
 			// Clear streaming indicator before updating
@@ -87,6 +96,56 @@ export class ChatPanel {
 		}
 	}
 	
+	public async clearChat(): Promise<void> {
+		this.messages = [];
+		this.context.globalState.update(this.currentWorkspaceKey, []);
+		if (this.panel) {
+			this.updateWebviewContent();
+		}
+		vscode.window.showInformationMessage('Chat history cleared.');
+	}
+
+	public async switchHistory(): Promise<void> {
+		const index = this.context.globalState.get<string[]>(ChatPanel.HISTORY_INDEX_KEY) || [];
+		if (index.length === 0) {
+			vscode.window.showInformationMessage('No chat histories found.');
+			return;
+		}
+
+		const items = index.map(name => {
+			const key = `clawsouls.chatHistory.${name}`;
+			const msgs = this.context.globalState.get<any[]>(key) || [];
+			const isCurrent = key === this.currentWorkspaceKey;
+			return {
+				label: `${isCurrent ? '● ' : ''}${name}`,
+				description: `${msgs.length} messages${isCurrent ? ' (current)' : ''}`,
+				wsName: name,
+				key
+			};
+		});
+
+		const picked = await vscode.window.showQuickPick(items, {
+			placeHolder: 'Select chat history to view'
+		});
+		if (!picked) return;
+
+		// Load that workspace's history
+		const saved = this.context.globalState.get<typeof this.messages>(picked.key) || [];
+		this.messages = saved.slice(-ChatPanel.MAX_HISTORY);
+		this.currentWorkspaceKey = picked.key;
+		if (this.panel) {
+			this.updateWebviewContent();
+		}
+	}
+
+	private updateHistoryIndex(wsName: string): void {
+		const index = this.context.globalState.get<string[]>(ChatPanel.HISTORY_INDEX_KEY) || [];
+		if (!index.includes(wsName)) {
+			index.push(wsName);
+			this.context.globalState.update(ChatPanel.HISTORY_INDEX_KEY, index);
+		}
+	}
+
 	private handleWebviewMessage(message: any): void {
 		switch (message.type) {
 			case 'sendMessage':

@@ -106,6 +106,14 @@
         "title": "ClawSouls: Restart Gateway"
       },
       {
+        "command": "clawsouls.clearChat",
+        "title": "ClawSouls: Clear Chat"
+      },
+      {
+        "command": "clawsouls.switchHistory",
+        "title": "ClawSouls: Switch Chat History"
+      },
+      {
         "command": "clawsouls.editSoul",
         "title": "ClawSouls: Edit Soul"
       },

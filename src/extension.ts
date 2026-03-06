@@ -42,6 +42,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			await restartGateway();
 		}),
 		vscode.commands.registerCommand('clawsouls.openChat', () => chatPanel?.show()),
+		vscode.commands.registerCommand('clawsouls.clearChat', () => chatPanel?.clearChat()),
+		vscode.commands.registerCommand('clawsouls.switchHistory', () => chatPanel?.switchHistory()),
 		vscode.commands.registerCommand('clawsouls.restartGateway', () => gatewayConnection?.restart()),
 		vscode.commands.registerCommand('clawsouls.connect', async () => {
 			if (gatewayLauncher?.gatewayToken) {
