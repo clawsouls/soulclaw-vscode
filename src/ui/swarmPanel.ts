@@ -51,6 +51,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		const items: SwarmNode[] = [];
 
 		// Actions
+		items.push(new SwarmActionNode('👤 Join as Agent', 'clawsouls.joinAgent', 'person-add'));
 		items.push(new SwarmActionNode('⬆ Push', 'clawsouls.pushChanges', 'cloud-upload'));
 		items.push(new SwarmActionNode('⬇ Pull', 'clawsouls.pullLatest', 'cloud-download'));
 		items.push(new SwarmActionNode('🔀 Merge', 'clawsouls.mergeBranches', 'git-merge'));
