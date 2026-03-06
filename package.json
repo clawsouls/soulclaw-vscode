@@ -279,11 +279,11 @@
       },
       {
         "view": "clawsouls.swarm",
-        "contents": "Swarm not initialized.\n[Run Setup](command:clawsouls.setup)"
+        "contents": "Swarm not initialized.\n[Initialize Swarm](command:clawsouls.initSwarm)"
       },
       {
         "view": "clawsouls.checkpoints",
-        "contents": "No checkpoints found.\n[Run Setup](command:clawsouls.setup)"
+        "contents": "No checkpoints found.\n[Create Checkpoint](command:clawsouls.createCheckpoint)"
       }
     ]
   },

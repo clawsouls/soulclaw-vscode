@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { GatewayConnection, ConnectionState } from '../gateway/connection';
 
 export class StatusBarManager {
+	private chatItem: vscode.StatusBarItem;
 	private soulStatusItem: vscode.StatusBarItem;
 	private agentStatusItem: vscode.StatusBarItem;
 	private connectionStatusItem: vscode.StatusBarItem;
@@ -13,6 +14,7 @@ export class StatusBarManager {
 		private gateway: GatewayConnection
 	) {
 		// Create status bar items
+		this.chatItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 101);
 		this.soulStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
 		this.agentStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
 		this.connectionStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
@@ -32,6 +34,7 @@ export class StatusBarManager {
 		soulWatcher.onDidDelete(() => { this.soulStatusItem.text = '🔮 No Soul'; });
 		
 		context.subscriptions.push(
+			this.chatItem,
 			this.soulStatusItem,
 			this.agentStatusItem,
 			this.connectionStatusItem,
@@ -42,6 +45,11 @@ export class StatusBarManager {
 	}
 	
 	private setupStatusItems(): void {
+		// Chat button
+		this.chatItem.text = '💬 Chat';
+		this.chatItem.command = 'clawsouls.openChat';
+		this.chatItem.tooltip = 'Open ClawSouls Chat';
+
 		// Soul status
 		this.soulStatusItem.command = 'clawsouls.openChat';
 		this.soulStatusItem.tooltip = 'Click to open chat with current soul';
@@ -66,6 +74,7 @@ export class StatusBarManager {
 		// Show all items
 		const config = vscode.workspace.getConfiguration('clawsouls');
 		if (config.get('showStatusBar', true)) {
+			this.chatItem.show();
 			this.soulStatusItem.show();
 			this.agentStatusItem.show();
 			this.connectionStatusItem.show();
