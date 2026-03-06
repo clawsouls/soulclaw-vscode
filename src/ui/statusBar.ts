@@ -40,7 +40,8 @@ export class StatusBarManager {
 			this.connectionStatusItem,
 			this.restartItem,
 			this.setupItem,
-			soulWatcher
+			soulWatcher,
+			vscode.commands.registerCommand('clawsouls.refreshStatusBar', () => this.refreshSoulName())
 		);
 	}
 	

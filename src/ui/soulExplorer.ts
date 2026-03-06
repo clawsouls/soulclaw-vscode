@@ -294,8 +294,29 @@ ${scan}
 			}
 
 			const dirs = targetDirs.map(d => path.basename(path.dirname(d)) + '/' + path.basename(d)).join(', ');
-			vscode.window.showInformationMessage(`✅ Soul "${soul.displayName}" applied. Restarting gateway to load new soul...`);
+			// Ask to clear previous memory
+			const clearMem = await vscode.window.showInformationMessage(
+				`✅ Soul "${soul.displayName}" applied. Clear previous memory files?`,
+				'Clear Memory', 'Keep Memory'
+			);
+			if (clearMem === 'Clear Memory') {
+				const openclawWs = targetDirs[0]; // OpenClaw workspace
+				const memoryFiles = ['MEMORY.md', 'USER.md'];
+				const memoryDir = path.join(openclawWs, 'memory');
+				for (const f of memoryFiles) {
+					const fp = path.join(openclawWs, f);
+					if (fs.existsSync(fp)) fs.unlinkSync(fp);
+				}
+				if (fs.existsSync(memoryDir)) {
+					fs.rmSync(memoryDir, { recursive: true, force: true });
+				}
+			}
 			this.refresh();
+
+			// Refresh status bar soul name
+			try {
+				await vscode.commands.executeCommand('clawsouls.refreshStatusBar');
+			} catch {}
 
 			// Restart gateway so the new soul takes effect
 			try {
