@@ -281,7 +281,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			if (proceed !== 'Continue') return;
 		}
 
-		// For pull and merge, also sync to workspace + restart gateway
+		// For pull and merge, also sync to workspace + restart engine
 		const needsSync = command === 'swarm pull' || command.startsWith('swarm merge');
 
 		const terminal = vscode.window.createTerminal('ClawSouls Swarm');
@@ -292,12 +292,12 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			// Run CLI command, then sync to workspace
 			terminal.sendText(`cd "${swarmDir}" ${sep} npx clawsouls ${command} ${sep} npx clawsouls swarm sync`);
 
-			// Restart gateway after a short delay to pick up new files
+			// Restart engine after a short delay to pick up new files
 			setTimeout(async () => {
 				try {
 					await vscode.commands.executeCommand('clawsouls.restartGateway');
 				} catch {
-					// Non-fatal — gateway restart command may not be registered
+					// Non-fatal — engine restart command may not be registered
 				}
 				this.refresh();
 			}, 5000);

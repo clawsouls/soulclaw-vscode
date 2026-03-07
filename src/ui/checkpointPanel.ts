@@ -43,15 +43,15 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		return this.checkpoints.map(cp => new CheckpointNode(cp));
 	}
 
-	/** OpenClaw workspace where soul files live */
-	private getOpenClawWorkspaceDir(): string {
+	/** SoulClaw workspace where soul files live */
+	private getWorkspaceDirectory(): string {
 		const { getWorkspaceDir } = require('../paths');
 		return getWorkspaceDir();
 	}
 
 	/** Checkpoints stored alongside soul files in {stateDir}/workspace/.clawsouls/checkpoints/ */
 	private getCheckpointDir(): string {
-		return path.join(this.getOpenClawWorkspaceDir(), '.clawsouls', 'checkpoints');
+		return path.join(this.getWorkspaceDirectory(), '.clawsouls', 'checkpoints');
 	}
 
 	private loadCheckpoints(): void {
@@ -100,7 +100,7 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		});
 		if (label === undefined) return; // cancelled
 
-		const rootDir = this.getOpenClawWorkspaceDir();
+		const rootDir = this.getWorkspaceDirectory();
 		const soulFiles = ['soul.json', 'SOUL.md', 'AGENTS.md', 'MEMORY.md', 'IDENTITY.md', 'HEARTBEAT.md', 'STYLE.md'];
 		const existingFiles: string[] = [];
 
@@ -150,7 +150,7 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		);
 		if (confirm !== 'Restore') return;
 
-		const rootDir = this.getOpenClawWorkspaceDir();
+		const rootDir = this.getWorkspaceDirectory();
 		const cpDir = path.join(this.getCheckpointDir(), node.cp.id);
 
 		for (const f of node.cp.files) {
@@ -161,9 +161,9 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 			}
 		}
 
-		vscode.window.showInformationMessage(`✅ Restored checkpoint "${node.cp.label}". Restarting gateway...`);
+		vscode.window.showInformationMessage(`✅ Restored checkpoint "${node.cp.label}". Restarting engine...`);
 
-		// Restart gateway so it picks up restored soul files
+		// Restart engine so it picks up restored soul files
 		try {
 			await vscode.commands.executeCommand('clawsouls.restartGateway');
 		} catch {
@@ -187,7 +187,7 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 	}
 
 	private async diffCheckpoint(node: CheckpointNode): Promise<void> {
-		const rootDir = this.getOpenClawWorkspaceDir();
+		const rootDir = this.getWorkspaceDirectory();
 		const cpDir = path.join(this.getCheckpointDir(), node.cp.id);
 
 		// Let user pick a file to diff

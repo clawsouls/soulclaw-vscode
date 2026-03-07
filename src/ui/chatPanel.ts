@@ -238,8 +238,8 @@ export class ChatPanel {
 			`;
 		}).join('');
 		
-		const gatewayStatus = this.engine.state === 'ready' ? 'connected' : this.engine.state;
-		const statusColor = this.getStatusColor(gatewayStatus);
+		const engineStatus = this.engine.state === 'ready' ? 'connected' : this.engine.state;
+		const statusColor = this.getStatusColor(engineStatus);
 		
 		this.panel.webview.html = `
 			<!DOCTYPE html>
@@ -254,7 +254,7 @@ export class ChatPanel {
 				<div class="header" style="display:flex;justify-content:space-between;align-items:center;">
 					<div class="status">
 						<span class="status-indicator" style="background-color: ${statusColor}"></span>
-						Gateway: ${gatewayStatus}
+						Engine: ${engineStatus}
 					</div>
 					<div style="display:flex;gap:8px;">
 						<button id="clearBtn" title="Clear Chat" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--vscode-foreground);opacity:0.7;padding:2px 6px;">🗑️ Clear</button>
@@ -377,7 +377,7 @@ export class ChatPanel {
 							if (statusEl) {
 								const colors = { connected: '#00ff00', connecting: '#ffff00', error: '#ff0000', disconnected: '#888888', idle: '#888888' };
 								const color = colors[message.state] || '#888888';
-								statusEl.innerHTML = '<span class="status-indicator" style="background-color: ' + color + '"></span> Gateway: ' + message.state;
+								statusEl.innerHTML = '<span class="status-indicator" style="background-color: ' + color + '"></span> Engine: ' + message.state;
 							}
 						}
 					});

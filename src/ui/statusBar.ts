@@ -65,12 +65,12 @@ export class StatusBarManager {
 		this.agentStatusItem.tooltip = 'Current agent/branch - click to switch';
 		
 		// Connection status
-		this.connectionStatusItem.tooltip = 'OpenClaw Gateway connection status';
+		this.connectionStatusItem.tooltip = 'SoulClaw Engine connection status';
 		
 		// Restart button
 		this.restartItem.text = '🔄';
 		this.restartItem.command = 'clawsouls.restartGateway';
-		this.restartItem.tooltip = 'Restart OpenClaw Gateway';
+		this.restartItem.tooltip = 'Restart SoulClaw Engine';
 
 		// Setup button
 		this.setupItem.text = '⚙️ Setup';
@@ -111,35 +111,35 @@ export class StatusBarManager {
 				this.connectionStatusItem.text = '⚪ idle';
 				this.connectionStatusItem.backgroundColor = undefined;
 				this.connectionStatusItem.command = 'clawsouls.setup';
-				this.connectionStatusItem.tooltip = 'Gateway idle - click to setup';
+				this.connectionStatusItem.tooltip = 'Engine idle - click to setup';
 				break;
 				
 			case 'connecting':
 				this.connectionStatusItem.text = '🔄 connecting';
 				this.connectionStatusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
 				this.connectionStatusItem.command = undefined;
-				this.connectionStatusItem.tooltip = 'Connecting to Gateway...';
+				this.connectionStatusItem.tooltip = 'Connecting......';
 				break;
 				
 			case 'connected':
 				this.connectionStatusItem.text = '🟢 connected';
 				this.connectionStatusItem.backgroundColor = undefined;
 				this.connectionStatusItem.command = 'clawsouls.openChat';
-				this.connectionStatusItem.tooltip = 'Gateway connected - click to chat';
+				this.connectionStatusItem.tooltip = 'Connected - click to chat';
 				break;
 				
 			case 'error':
 				this.connectionStatusItem.text = '🔴 error — click to connect';
 				this.connectionStatusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
 				this.connectionStatusItem.command = 'clawsouls.connect';
-				this.connectionStatusItem.tooltip = 'Gateway error - click to connect';
+				this.connectionStatusItem.tooltip = 'Engine error - click to connect';
 				break;
 				
 			case 'disconnected':
 				this.connectionStatusItem.text = '⚪ disconnected — click to connect';
 				this.connectionStatusItem.backgroundColor = undefined;
 				this.connectionStatusItem.command = 'clawsouls.connect';
-				this.connectionStatusItem.tooltip = 'Gateway disconnected - click to connect';
+				this.connectionStatusItem.tooltip = 'Disconnected - click to connect';
 				break;
 		}
 	}
@@ -148,15 +148,15 @@ export class StatusBarManager {
 		const fs = require('fs');
 		const path = require('path');
 
-		// Check: OpenClaw workspace, VSCode workspace root, .clawsouls/ subdirs
+		// Check: SoulClaw workspace, VSCode workspace root, .clawsouls/ subdirs
 		const roots: string[] = [];
 
-		// OpenClaw workspace (where soul apply writes)
+		// SoulClaw workspace (where soul apply writes)
 		const stateDir = process.env.OPENCLAW_STATE_DIR;
-		const openclawWs = stateDir
+		const workspaceRoot = stateDir
 			? path.join(stateDir, 'workspace')
 			: (() => { const { getWorkspaceDir } = require('../paths'); return getWorkspaceDir(); })();
-		roots.push(openclawWs);
+		roots.push(workspaceRoot);
 
 		// VSCode workspace
 		const workspaces = vscode.workspace.workspaceFolders;

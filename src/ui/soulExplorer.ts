@@ -205,7 +205,7 @@ ${scan}
 </html>`;
 	}
 
-	private getOpenClawWorkspaceDir(): string {
+	private getWorkspaceDirectory(): string {
 		const { getWorkspaceDir } = require('../paths');
 		return getWorkspaceDir();
 	}
@@ -214,12 +214,12 @@ ${scan}
 		const soul = node.soul;
 		const workspaces = vscode.workspace.workspaceFolders;
 
-		// Write to OpenClaw workspace only (gateway reads from here)
-		const openclawDir = this.getOpenClawWorkspaceDir();
-		const targetDirs: string[] = [openclawDir];
-		const targetDir = openclawDir;
+		// Write to SoulClaw workspace only (engine reads from here)
+		const workspaceDir = this.getWorkspaceDirectory();
+		const targetDirs: string[] = [workspaceDir];
+		const targetDir = workspaceDir;
 		const confirm = await vscode.window.showInformationMessage(
-			`Apply "${soul.displayName}"? Soul files will be saved to OpenClaw workspace.`,
+			`Apply "${soul.displayName}"? Soul files will be saved to SoulClaw workspace.`,
 			'Apply', 'Cancel'
 		);
 		if (confirm !== 'Apply') return;
@@ -295,11 +295,11 @@ ${scan}
 				'Clear Memory', 'Keep Memory'
 			);
 			if (clearMem === 'Clear Memory') {
-				const openclawWs = targetDirs[0]; // OpenClaw workspace
+				const workspaceRoot = targetDirs[0]; // SoulClaw workspace
 				const memoryFiles = ['MEMORY.md', 'USER.md'];
-				const memoryDir = path.join(openclawWs, 'memory');
+				const memoryDir = path.join(workspaceRoot, 'memory');
 				for (const f of memoryFiles) {
-					const fp = path.join(openclawWs, f);
+					const fp = path.join(workspaceRoot, f);
 					if (fs.existsSync(fp)) fs.unlinkSync(fp);
 				}
 				if (fs.existsSync(memoryDir)) {
@@ -313,11 +313,11 @@ ${scan}
 				await vscode.commands.executeCommand('clawsouls.refreshStatusBar');
 			} catch {}
 
-			// Restart gateway so the new soul takes effect
+			// Restart engine so the new soul takes effect
 			try {
 				await vscode.commands.executeCommand('clawsouls.restartGateway');
 			} catch {
-				// Best effort — gateway may not be running
+				// Best effort — engine may not be running
 			}
 		} catch (err: any) {
 			vscode.window.showErrorMessage(`Failed to apply soul: ${err.message}`);
