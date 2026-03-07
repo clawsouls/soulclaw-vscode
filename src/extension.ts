@@ -118,6 +118,16 @@ export async function activate(context: vscode.ExtensionContext) {
 			treeDataProvider: checkpointProvider
 		});
 
+		// Watch config changes — auto restart engine
+		context.subscriptions.push(
+			vscode.workspace.onDidChangeConfiguration(e => {
+				if (e.affectsConfiguration('clawsouls')) {
+					outputChannel.appendLine('Config changed — restarting engine...');
+					restartEngine();
+				}
+			})
+		);
+
 		// First run: show setup wizard
 		const hasSetup = context.globalState.get('hasSetup', false);
 		if (!hasSetup) {

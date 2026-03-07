@@ -44,12 +44,12 @@ export class LLMClient extends EventEmitter {
 		return this.config.model || DEFAULT_MODELS[this.config.provider] || 'claude-sonnet-4-20250514';
 	}
 
-	async chat(messages: LLMMessage[], onDelta?: (text: string) => void): Promise<string> {
+	async chat(messages: LLMMessage[], onDelta?: (text: string) => void, tools?: any[]): Promise<string | { toolCalls: Array<{ id: string; name: string; args: any }> }> {
 		switch (this.config.provider) {
 			case 'anthropic':
-				return this.chatAnthropic(messages, onDelta);
+				return this.chatAnthropic(messages, onDelta, tools);
 			case 'openai':
-				return this.chatOpenAI(messages, onDelta);
+				return this.chatOpenAI(messages, onDelta, tools);
 			case 'ollama':
 				return this.chatOllama(messages, onDelta);
 			default:
@@ -57,17 +57,24 @@ export class LLMClient extends EventEmitter {
 		}
 	}
 
-	private async chatAnthropic(messages: LLMMessage[], onDelta?: (text: string) => void): Promise<string> {
+	private async chatAnthropic(messages: LLMMessage[], onDelta?: (text: string) => void, tools?: any[]): Promise<string | { toolCalls: Array<{ id: string; name: string; args: any }> }> {
 		const systemMsg = messages.find(m => m.role === 'system');
 		const chatMsgs = messages.filter(m => m.role !== 'system');
 
-		const body = JSON.stringify({
+		const payload: any = {
 			model: this.model,
 			max_tokens: 8192,
 			system: systemMsg?.content || '',
-			messages: chatMsgs.map(m => ({ role: m.role, content: m.content })),
+			messages: chatMsgs.map(m => {
+				if (typeof m.content === 'string') return { role: m.role, content: m.content };
+				return { role: m.role, content: m.content }; // support array content blocks
+			}),
 			stream: true,
-		});
+		};
+		if (tools && tools.length > 0) {
+			payload.tools = tools;
+		}
+		const body = JSON.stringify(payload);
 
 		return new Promise((resolve, reject) => {
 			const req = https.request({
@@ -89,6 +96,8 @@ export class LLMClient extends EventEmitter {
 
 				let fullText = '';
 				let buffer = '';
+				const toolCalls: Array<{ id: string; name: string; args: string }> = [];
+				let currentToolIndex = -1;
 
 				res.on('data', (chunk: Buffer) => {
 					buffer += chunk.toString();
@@ -102,7 +111,18 @@ export class LLMClient extends EventEmitter {
 
 						try {
 							const event = JSON.parse(data);
-							if (event.type === 'content_block_delta' && event.delta?.text) {
+							if (event.type === 'content_block_start' && event.content_block?.type === 'tool_use') {
+								currentToolIndex++;
+								toolCalls.push({
+									id: event.content_block.id,
+									name: event.content_block.name,
+									args: '',
+								});
+							} else if (event.type === 'content_block_delta' && event.delta?.type === 'input_json_delta') {
+								if (currentToolIndex >= 0 && toolCalls[currentToolIndex]) {
+									toolCalls[currentToolIndex].args += event.delta.partial_json;
+								}
+							} else if (event.type === 'content_block_delta' && event.delta?.text) {
 								fullText += event.delta.text;
 								onDelta?.(fullText);
 							}
@@ -110,7 +130,18 @@ export class LLMClient extends EventEmitter {
 					}
 				});
 
-				res.on('end', () => resolve(fullText));
+				res.on('end', () => {
+					if (toolCalls.length > 0) {
+						const parsed = toolCalls.map(tc => ({
+							id: tc.id,
+							name: tc.name,
+							args: (() => { try { return JSON.parse(tc.args); } catch { return {}; } })(),
+						}));
+						resolve({ toolCalls: parsed } as any);
+					} else {
+						resolve(fullText);
+					}
+				});
 			});
 
 			req.on('error', reject);
@@ -119,7 +150,7 @@ export class LLMClient extends EventEmitter {
 		});
 	}
 
-	private async chatOpenAI(messages: LLMMessage[], onDelta?: (text: string) => void): Promise<string> {
+	private async chatOpenAI(messages: LLMMessage[], onDelta?: (text: string) => void, tools?: any[]): Promise<string> {
 		const body = JSON.stringify({
 			model: this.model,
 			messages: messages.map(m => ({ role: m.role, content: m.content })),

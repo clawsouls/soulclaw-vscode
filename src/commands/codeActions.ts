@@ -107,5 +107,11 @@ export function registerCodeActions(context: vscode.ExtensionContext): void {
 			chatPanel?.notifyContextUpdate([]);
 			vscode.window.showInformationMessage('Code context cleared.');
 		}),
+		// CodeLens action — select range then trigger code action
+		vscode.commands.registerCommand('soulclaw.codeLensAction', async (uri: vscode.Uri, range: vscode.Range, kind: CodeActionKind) => {
+			const editor = await vscode.window.showTextDocument(uri);
+			editor.selection = new vscode.Selection(range.start, range.end);
+			await sendCodeAction(kind);
+		}),
 	);
 }

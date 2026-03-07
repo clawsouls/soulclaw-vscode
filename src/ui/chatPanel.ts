@@ -372,6 +372,27 @@ export class ChatPanel {
 						}
 					});
 					
+					// Add copy buttons to all code blocks
+					function addCopyButtons(container) {
+						container.querySelectorAll('pre').forEach(pre => {
+							if (pre.querySelector('.copy-btn')) return;
+							const btn = document.createElement('button');
+							btn.className = 'copy-btn';
+							btn.textContent = 'Copy';
+							btn.onclick = () => {
+								const code = pre.querySelector('code');
+								const text = code ? code.textContent : pre.textContent;
+								navigator.clipboard.writeText(text).then(() => {
+									btn.textContent = '✓';
+									setTimeout(() => btn.textContent = 'Copy', 1500);
+								});
+							};
+							pre.appendChild(btn);
+						});
+					}
+					// Initial code blocks
+					addCopyButtons(messagesContainer);
+
 					// Listen for messages from extension
 					window.addEventListener('message', (event) => {
 						const message = event.data;
@@ -385,6 +406,7 @@ export class ChatPanel {
 							el.className = 'message ' + roleClass;
 							el.innerHTML = '<div class="message-header"><span class="role-icon">' + roleIcon + '</span><span class="timestamp">' + message.time + '</span></div><div class="message-content">' + message.html + '</div>';
 							messagesContainer.appendChild(el);
+							addCopyButtons(el);
 							messagesContainer.scrollTop = messagesContainer.scrollHeight;
 						}
 						if (message.type === 'streamUpdate') {

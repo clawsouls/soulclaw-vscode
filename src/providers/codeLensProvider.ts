@@ -17,27 +17,62 @@ export class SoulClawCodeLensProvider implements vscode.CodeLensProvider {
 		for (const pattern of patterns) {
 			let match: RegExpExecArray | null;
 			while ((match = pattern.exec(text)) !== null) {
-				const pos = document.positionAt(match.index);
-				const range = new vscode.Range(pos, pos);
+				const startPos = document.positionAt(match.index);
+				const range = new vscode.Range(startPos, startPos);
+
+				// Find the end of this block (next function/class or EOF)
+				const endLine = this.findBlockEnd(document, startPos.line);
+				const selectRange = new vscode.Range(startPos, new vscode.Position(endLine, document.lineAt(endLine).text.length));
 
 				lenses.push(
 					new vscode.CodeLens(range, {
 						title: '🔮 Ask SoulClaw',
-						command: 'soulclaw.askAboutCode',
+						command: 'soulclaw.codeLensAction',
+						arguments: [document.uri, selectRange, 'ask'],
 					}),
 					new vscode.CodeLens(range, {
 						title: 'Explain',
-						command: 'soulclaw.explainCode',
+						command: 'soulclaw.codeLensAction',
+						arguments: [document.uri, selectRange, 'explain'],
 					}),
 					new vscode.CodeLens(range, {
 						title: 'Fix',
-						command: 'soulclaw.fixCode',
+						command: 'soulclaw.codeLensAction',
+						arguments: [document.uri, selectRange, 'fix'],
 					}),
 				);
 			}
 		}
 
 		return lenses;
+	}
+
+	/** Find end of a code block starting at given line */
+	private findBlockEnd(document: vscode.TextDocument, startLine: number): number {
+		let depth = 0;
+		let foundOpen = false;
+		
+		for (let i = startLine; i < document.lineCount; i++) {
+			const line = document.lineAt(i).text;
+			for (const ch of line) {
+				if (ch === '{') { depth++; foundOpen = true; }
+				if (ch === '}') depth--;
+				if (foundOpen && depth === 0) return i;
+			}
+		}
+		
+		// For Python/indent-based: find next line at same or lesser indent
+		if (!foundOpen) {
+			const startIndent = document.lineAt(startLine).firstNonWhitespaceCharacterIndex;
+			for (let i = startLine + 1; i < document.lineCount; i++) {
+				const line = document.lineAt(i);
+				if (line.isEmptyOrWhitespace) continue;
+				if (line.firstNonWhitespaceCharacterIndex <= startIndent) return i - 1;
+			}
+		}
+		
+		// Fallback: 30 lines or EOF
+		return Math.min(startLine + 30, document.lineCount - 1);
 	}
 
 	private getPatternsForLanguage(lang: string): RegExp[] {

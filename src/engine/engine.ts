@@ -10,6 +10,7 @@ import { LLMClient, type LLMMessage } from './llm-client';
 import { SessionStore } from './session-store';
 import { loadWorkspaceFiles, filterByTier } from './bootstrap';
 import { buildSystemPrompt } from './prompt-builder';
+import { getAnthropicTools, executeTool, type ToolCall } from './tools';
 
 export class SoulClawEngine extends EventEmitter {
 	private config!: EngineConfig;
@@ -43,7 +44,7 @@ export class SoulClawEngine extends EventEmitter {
 		this.log('Engine initialized');
 	}
 
-	async sendMessage(text: string, sessionKey?: string): Promise<string> {
+	async sendMessage(text: string, sessionKey?: string, retried?: boolean): Promise<string> {
 		const key = sessionKey || this._sessionKey;
 		
 		if (this._state !== 'ready') {
@@ -85,22 +86,86 @@ export class SoulClawEngine extends EventEmitter {
 				...this.truncateHistory(history),
 			];
 
-			// Stream response
-			this.emit('stateChange', 'running');
+			// Get tools based on provider
+			const tools = this.config.llmProvider === 'anthropic' ? getAnthropicTools() : undefined;
 
-			const response = await this.llm.chat(llmMessages, (partialText) => {
-				this.emit('delta', partialText);
-			});
+			// Agentic loop — keep running until we get a text response (not tool calls)
+			const MAX_TOOL_ROUNDS = 10;
+			let finalText = '';
+
+			for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+				this.emit('stateChange', 'running');
+
+				const response = await this.llm.chat(llmMessages, (partialText) => {
+					this.emit('delta', partialText);
+				}, tools);
+
+				// Check if response contains tool calls
+				if (typeof response === 'object' && 'toolCalls' in response) {
+					// Execute each tool call
+					const toolResults: Array<{ tool_use_id: string; content: string }> = [];
+					
+					for (const tc of response.toolCalls) {
+						this.log(`Tool call: ${tc.name}(${JSON.stringify(tc.args).slice(0, 200)})`);
+						this.emit('delta', `🔧 Running ${tc.name}...`);
+						
+						const projectDir = this.getProjectDir();
+						const result = executeTool(
+							{ name: tc.name, args: tc.args },
+							projectDir
+						);
+						
+						this.log(`Tool result (${result.success ? 'ok' : 'err'}): ${result.output.slice(0, 200)}`);
+						toolResults.push({
+							tool_use_id: tc.id,
+							content: result.output,
+						});
+					}
+
+					// Add assistant tool_use message + tool results to conversation
+					llmMessages.push({
+						role: 'assistant',
+						content: response.toolCalls.map((tc: any) => ({
+							type: 'tool_use',
+							id: tc.id,
+							name: tc.name,
+							input: tc.args,
+						})) as any,
+					});
+					llmMessages.push({
+						role: 'user',
+						content: toolResults.map(tr => ({
+							type: 'tool_result',
+							tool_use_id: tr.tool_use_id,
+							content: tr.content,
+						})) as any,
+					});
+
+					continue; // Next round
+				}
+
+				// Plain text response — we're done
+				finalText = response as string;
+				break;
+			}
 
 			// Save assistant response
-			const assistantMsg: ChatMessage = { role: 'assistant', content: response, timestamp: Date.now() };
+			const assistantMsg: ChatMessage = { role: 'assistant', content: finalText, timestamp: Date.now() };
 			this.sessions.addMessage(key, assistantMsg);
 
 			this.setState('ready');
 			this.emit('final', assistantMsg);
 
-			return response;
+			return finalText;
 		} catch (err: any) {
+			// Retry once on network/timeout errors
+			if (this.isRetryableError(err) && !retried) {
+				this.log(`Retryable error, retrying in 2s: ${err.message}`);
+				this.emit('delta', '⚠️ Connection error, retrying...');
+				await new Promise(r => setTimeout(r, 2000));
+				this.setState('ready');
+				return this.sendMessage(text, sessionKey, true);
+			}
 			this.setState('ready');
 			this.emit('error', err);
 			throw err;
@@ -124,8 +189,26 @@ export class SoulClawEngine extends EventEmitter {
 
 	dispose(): void {
 		this.setState('idle');
-		this.removeAllListeners();
+		// NOTE: Do NOT removeAllListeners — chatPanel and statusBar hold persistent listeners.
+		// They are registered once in constructor and must survive engine restart.
 		this.log('Engine disposed');
+	}
+
+	private isRetryableError(err: any): boolean {
+		const msg = (err.message || '').toLowerCase();
+		return msg.includes('econnreset') || msg.includes('etimedout') ||
+			msg.includes('econnrefused') || msg.includes('socket hang up') ||
+			msg.includes('529') || msg.includes('overloaded');
+	}
+
+	/** Get project directory — prefer VSCode workspace, fallback to engine workspace */
+	private getProjectDir(): string {
+		try {
+			const vscode = require('vscode');
+			const ws = vscode.workspace.workspaceFolders;
+			if (ws && ws.length > 0) return ws[0].uri.fsPath;
+		} catch {}
+		return this.config.workspaceDir;
 	}
 
 	/**
