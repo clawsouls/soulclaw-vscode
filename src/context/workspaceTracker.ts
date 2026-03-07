@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 
 export interface WorkspaceContext {
 	workspacePath?: string;
@@ -61,6 +63,7 @@ export class WorkspaceTracker {
 		this.updateProjectType();
 		this.loadSoulConfig();
 		this.updateGitBranch();
+		this.syncProjectToToolsMd();
 	}
 	
 	private updateWorkspacePath(): void {
@@ -154,6 +157,44 @@ export class WorkspaceTracker {
 		}
 	}
 	
+	/**
+	 * Write current project info to ~/.openclaw/workspace/TOOLS.md
+	 * so the LLM knows the active project path.
+	 */
+	private syncProjectToToolsMd(): void {
+		if (!this.context.workspacePath) return;
+
+		const toolsMdPath = path.join(os.homedir(), '.openclaw', 'workspace', 'TOOLS.md');
+		const sectionHeader = '## Current Project';
+		const newSection = [
+			sectionHeader,
+			`- **Path**: \`${this.context.workspacePath}\``,
+			`- **Name**: ${path.basename(this.context.workspacePath)}`,
+			this.context.projectType ? `- **Type**: ${this.context.projectType}` : '',
+			this.context.gitBranch ? `- **Branch**: ${this.context.gitBranch}` : '',
+			`- **Updated**: ${new Date().toISOString()}`,
+		].filter(Boolean).join('\n');
+
+		try {
+			let content = '';
+			if (fs.existsSync(toolsMdPath)) {
+				content = fs.readFileSync(toolsMdPath, 'utf8');
+			}
+
+			// Replace existing section or append
+			const sectionRegex = /## Current Project[\s\S]*?(?=\n## |\n---|\n$|$)/;
+			if (sectionRegex.test(content)) {
+				content = content.replace(sectionRegex, newSection);
+			} else {
+				content = content.trimEnd() + '\n\n' + newSection + '\n';
+			}
+
+			fs.writeFileSync(toolsMdPath, content, 'utf8');
+		} catch {
+			// Non-fatal — TOOLS.md may not exist yet
+		}
+	}
+
 	public getContext(): WorkspaceContext {
 		return { ...this.context }; // Return a copy to prevent external modification
 	}
