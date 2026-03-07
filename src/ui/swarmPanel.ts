@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { execSync } from 'child_process';
 
 interface SwarmBranch {
@@ -66,27 +67,16 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		return items;
 	}
 
-	private getWorkspaceRoot(): string | null {
-		const ws = vscode.workspace.workspaceFolders;
-		return ws && ws.length > 0 ? ws[0].uri.fsPath : null;
-	}
-
-	/** Swarm memory lives in globalStorage, isolated from the project repo */
-	private getSwarmDir(): string | null {
-		const ws = vscode.workspace.workspaceFolders;
-		if (!ws || ws.length === 0) return null;
-		const workspaceName = path.basename(ws[0].uri.fsPath);
-		return path.join(this.context.globalStorageUri.fsPath, 'swarm', workspaceName);
+	/**
+	 * Swarm memory lives at ~/.openclaw/swarm/ — shared across all workspaces
+	 * so multiple agents can access the same memory repository.
+	 */
+	private getSwarmDir(): string {
+		return path.join(os.homedir(), '.openclaw', 'swarm');
 	}
 
 	private detectSwarm(): void {
 		const swarmDir = this.getSwarmDir();
-		if (!swarmDir) {
-			this.initialized = false;
-			this.branches = [];
-			return;
-		}
-
 		const gitDir = path.join(swarmDir, '.git');
 		this.initialized = fs.existsSync(gitDir);
 
@@ -112,12 +102,14 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		}
 	}
 
+	/** Get current branch name, or null */
+	private getCurrentBranch(): string | null {
+		const current = this.branches.find(b => b.current);
+		return current ? current.name : null;
+	}
+
 	private async initSwarm(): Promise<void> {
 		const swarmDir = this.getSwarmDir();
-		if (!swarmDir) {
-			vscode.window.showWarningMessage('Open a workspace folder first.');
-			return;
-		}
 
 		const repoUrl = await vscode.window.showInputBox({
 			prompt: 'Git remote URL for swarm memory (or leave empty for local-only)',
@@ -134,18 +126,16 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 				execSync('git init', { cwd: swarmDir, encoding: 'utf8' });
 				// Create initial soul.json so CLI works
 				const ws = vscode.workspace.workspaceFolders;
-				if (ws) {
-					const srcSoul = path.join(ws[0].uri.fsPath, 'soul.json');
-					const dstSoul = path.join(swarmDir, 'soul.json');
-					if (fs.existsSync(srcSoul)) {
-						fs.copyFileSync(srcSoul, dstSoul);
-					} else {
-						fs.writeFileSync(dstSoul, JSON.stringify({ specVersion: "0.5", name: "swarm-memory" }, null, 2));
-					}
-					// Initial commit
-					const sep = process.platform === 'win32' ? ';' : '&&';
-					execSync(`git add -A ${sep} git commit -m "init swarm memory"`, { cwd: swarmDir, encoding: 'utf8' });
+				const srcSoul = ws ? path.join(ws[0].uri.fsPath, 'soul.json') : null;
+				const dstSoul = path.join(swarmDir, 'soul.json');
+				if (srcSoul && fs.existsSync(srcSoul)) {
+					fs.copyFileSync(srcSoul, dstSoul);
+				} else {
+					fs.writeFileSync(dstSoul, JSON.stringify({ specVersion: "0.5", name: "swarm-memory" }, null, 2));
 				}
+				// Initial commit
+				const sep = process.platform === 'win32' ? ';' : '&&';
+				execSync(`git add -A ${sep} git commit -m "init swarm memory"`, { cwd: swarmDir, encoding: 'utf8' });
 			}
 
 			// Ask to join as agent immediately
@@ -174,19 +164,27 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 
 	private async joinAgent(): Promise<void> {
 		const swarmDir = this.getSwarmDir();
-		if (!swarmDir || !this.initialized) {
+		if (!this.initialized) {
 			vscode.window.showWarningMessage('Initialize swarm first.');
 			return;
 		}
 
-		const branchName = await vscode.window.showInputBox({
-			prompt: 'Agent branch name',
-			placeHolder: 'e.g. agent/brad, agent/alice'
+		const input = await vscode.window.showInputBox({
+			prompt: 'Agent name (e.g. brad, alice)',
+			placeHolder: 'e.g. brad, alice, my-agent'
 		});
-		if (!branchName) return;
+		if (!input) return;
+
+		// Auto-add agent/ prefix
+		const branchName = input.startsWith('agent/') ? input : `agent/${input}`;
 
 		try {
-			execSync(`git checkout -b "${branchName}"`, { cwd: swarmDir, encoding: 'utf8' });
+			try {
+				execSync(`git checkout -b "${branchName}"`, { cwd: swarmDir, encoding: 'utf8' });
+			} catch {
+				// Branch already exists — switch to it
+				execSync(`git checkout "${branchName}"`, { cwd: swarmDir, encoding: 'utf8' });
+			}
 			vscode.window.showInformationMessage(`✅ Joined as "${branchName}".`);
 			this.refresh();
 		} catch (err: any) {
@@ -196,7 +194,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 
 	private async mergeBranches(): Promise<void> {
 		const swarmDir = this.getSwarmDir();
-		if (!swarmDir || !this.initialized) return;
+		if (!this.initialized) return;
 
 		const otherBranches = this.branches.filter(b => !b.current).map(b => b.name);
 		if (otherBranches.length === 0) {
@@ -233,7 +231,6 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 
 	private async switchBranch(node: SwarmBranchNode): Promise<void> {
 		const swarmDir = this.getSwarmDir();
-		if (!swarmDir) return;
 
 		try {
 			execSync(`git checkout "${node.branch.name}"`, { cwd: swarmDir, encoding: 'utf8' });
@@ -268,9 +265,19 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 
 	private async runCli(command: string): Promise<void> {
 		const swarmDir = this.getSwarmDir();
-		if (!swarmDir || !this.initialized) {
+		if (!this.initialized) {
 			vscode.window.showWarningMessage('Initialize swarm first.');
 			return;
+		}
+
+		// Warn if not on agent/* branch for push/pull
+		const currentBranch = this.getCurrentBranch();
+		if ((command === 'swarm push' || command === 'swarm pull') && currentBranch && !currentBranch.startsWith('agent/')) {
+			const proceed = await vscode.window.showWarningMessage(
+				`Current branch "${currentBranch}" is not an agent branch. Push/Pull expects "agent/*". Continue anyway?`,
+				'Continue', 'Cancel'
+			);
+			if (proceed !== 'Continue') return;
 		}
 
 		const terminal = vscode.window.createTerminal('ClawSouls Swarm');

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as crypto from 'crypto';
 
 interface CheckpointInfo {
@@ -42,16 +43,19 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		return this.checkpoints.map(cp => new CheckpointNode(cp));
 	}
 
-	private getCheckpointDir(): string | null {
-		const ws = vscode.workspace.workspaceFolders;
-		if (!ws || ws.length === 0) return null;
-		const dir = path.join(ws[0].uri.fsPath, '.clawsouls', 'checkpoints');
-		return dir;
+	/** OpenClaw workspace where soul files live */
+	private getOpenClawWorkspaceDir(): string {
+		return path.join(os.homedir(), '.openclaw', 'workspace');
+	}
+
+	/** Checkpoints stored alongside soul files in ~/.openclaw/workspace/.clawsouls/checkpoints/ */
+	private getCheckpointDir(): string {
+		return path.join(this.getOpenClawWorkspaceDir(), '.clawsouls', 'checkpoints');
 	}
 
 	private loadCheckpoints(): void {
 		const dir = this.getCheckpointDir();
-		if (!dir || !fs.existsSync(dir)) {
+		if (!fs.existsSync(dir)) {
 			this.checkpoints = [];
 			return;
 		}
@@ -89,19 +93,13 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 	}
 
 	private async createCheckpoint(): Promise<void> {
-		const ws = vscode.workspace.workspaceFolders;
-		if (!ws || ws.length === 0) {
-			vscode.window.showWarningMessage('Open a workspace folder first.');
-			return;
-		}
-
 		const label = await vscode.window.showInputBox({
 			prompt: 'Checkpoint label (optional)',
 			placeHolder: 'e.g. before-refactor, stable-v1'
 		});
 		if (label === undefined) return; // cancelled
 
-		const rootDir = ws[0].uri.fsPath;
+		const rootDir = this.getOpenClawWorkspaceDir();
 		const soulFiles = ['soul.json', 'SOUL.md', 'AGENTS.md', 'MEMORY.md', 'IDENTITY.md', 'HEARTBEAT.md', 'STYLE.md'];
 		const existingFiles: string[] = [];
 
@@ -112,12 +110,12 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		}
 
 		if (existingFiles.length === 0) {
-			vscode.window.showWarningMessage('No soul files found in workspace.');
+			vscode.window.showWarningMessage('No soul files found in ~/.openclaw/workspace/.');
 			return;
 		}
 
 		const cpId = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-		const cpDir = path.join(rootDir, '.clawsouls', 'checkpoints', cpId);
+		const cpDir = path.join(this.getCheckpointDir(), cpId);
 		fs.mkdirSync(cpDir, { recursive: true });
 
 		// Copy files
@@ -139,23 +137,11 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		};
 		fs.writeFileSync(path.join(cpDir, 'checkpoint.json'), JSON.stringify(meta, null, 2));
 
-		// Add .clawsouls to .gitignore if not present
-		const gitignorePath = path.join(rootDir, '.gitignore');
-		if (fs.existsSync(gitignorePath)) {
-			const content = fs.readFileSync(gitignorePath, 'utf8');
-			if (!content.includes('.clawsouls/')) {
-				fs.appendFileSync(gitignorePath, '\n.clawsouls/\n');
-			}
-		}
-
 		vscode.window.showInformationMessage(`✅ Checkpoint "${meta.label}" created (${existingFiles.length} files).`);
 		this.refresh();
 	}
 
 	private async restoreCheckpoint(node: CheckpointNode): Promise<void> {
-		const ws = vscode.workspace.workspaceFolders;
-		if (!ws) return;
-
 		const confirm = await vscode.window.showWarningMessage(
 			`Restore checkpoint "${node.cp.label}"? This will overwrite current soul files.`,
 			{ modal: true },
@@ -163,8 +149,8 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		);
 		if (confirm !== 'Restore') return;
 
-		const rootDir = ws[0].uri.fsPath;
-		const cpDir = path.join(rootDir, '.clawsouls', 'checkpoints', node.cp.id);
+		const rootDir = this.getOpenClawWorkspaceDir();
+		const cpDir = path.join(this.getCheckpointDir(), node.cp.id);
 
 		for (const f of node.cp.files) {
 			const src = path.join(cpDir, f);
@@ -174,7 +160,14 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 			}
 		}
 
-		vscode.window.showInformationMessage(`✅ Restored checkpoint "${node.cp.label}".`);
+		vscode.window.showInformationMessage(`✅ Restored checkpoint "${node.cp.label}". Restarting gateway...`);
+
+		// Restart gateway so it picks up restored soul files
+		try {
+			await vscode.commands.executeCommand('clawsouls.restartGateway');
+		} catch {
+			// Command may not be registered yet — non-fatal
+		}
 	}
 
 	private async deleteCheckpoint(node: CheckpointNode): Promise<void> {
@@ -185,10 +178,7 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		);
 		if (confirm !== 'Delete') return;
 
-		const ws = vscode.workspace.workspaceFolders;
-		if (!ws) return;
-
-		const cpDir = path.join(ws[0].uri.fsPath, '.clawsouls', 'checkpoints', node.cp.id);
+		const cpDir = path.join(this.getCheckpointDir(), node.cp.id);
 		fs.rmSync(cpDir, { recursive: true, force: true });
 
 		vscode.window.showInformationMessage(`Checkpoint "${node.cp.label}" deleted.`);
@@ -196,11 +186,8 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 	}
 
 	private async diffCheckpoint(node: CheckpointNode): Promise<void> {
-		const ws = vscode.workspace.workspaceFolders;
-		if (!ws) return;
-
-		const rootDir = ws[0].uri.fsPath;
-		const cpDir = path.join(rootDir, '.clawsouls', 'checkpoints', node.cp.id);
+		const rootDir = this.getOpenClawWorkspaceDir();
+		const cpDir = path.join(this.getCheckpointDir(), node.cp.id);
 
 		// Let user pick a file to diff
 		const files = node.cp.files.filter(f => fs.existsSync(path.join(cpDir, f)) && fs.existsSync(path.join(rootDir, f)));
