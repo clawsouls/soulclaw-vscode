@@ -17,6 +17,15 @@
 | S-03 | Ollama 선택 → URL 입력 | Ollama 모드로 설정 |  |
 | S-04 | 잘못된 API key 입력 | 에러 메시지 표시 |  |
 | S-05 | Command Palette → "ClawSouls: Setup" | Setup Wizard 재실행 |  |
+| S-06 | Step 4: Soul 브라우저 로딩 | API에서 soul 목록 fetch, 카드 그리드 표시 |  |
+| S-07 | Step 4: 검색 입력 | 이름/설명/태그로 실시간 필터링 |  |
+| S-08 | Step 4: 카테고리 필터 클릭 | 해당 카테고리만 표시 |  |
+| S-09 | Step 4: 인기 soul ⭐ 배지 | 상위 3개에 "Popular" 배지 표시 |  |
+| S-10 | Step 4: Soul 카드 클릭 → Next | 선택한 soul이 OpenClaw workspace에 apply |  |
+| S-11 | Step 4: "Create Custom" 선택 → Next | Custom soul 생성 플로우 |  |
+| S-12 | Step 4: "Start Empty" 선택 → Next | Soul 없이 진행 |  |
+| S-13 | Step 4: 다운로드 수/스캔 상태 표시 | 각 카드에 ⬇ count, ✅/⚠️ 배지 |  |
+| S-14 | Step 4: API 장애 시 | "No souls found" 표시, Custom/Empty로 진행 가능 |  |
 
 ---
 
@@ -145,7 +154,27 @@
 
 ---
 
-## 10. Activity Bar & UI
+## 10. Chat History
+
+| # | 테스트 | 기대 결과 | Pass |
+|---|--------|-----------|------|
+| CH-01 | Chat History 패널 열기 | 과거 세션 목록 표시 |  |
+| CH-02 | 세션 항목 클릭 | 해당 세션 대화 내용 Chat에 로드 |  |
+| CH-03 | 여러 세션 전환 | 각 세션 히스토리 정확히 표시 |  |
+
+---
+
+## 11. Workspace Tracker
+
+| # | 테스트 | 기대 결과 | Pass |
+|---|--------|-----------|------|
+| WT-01 | 프로젝트 폴더 열기 | TOOLS.md에 `## Current Project` 섹션 자동 추가 |  |
+| WT-02 | 다른 프로젝트로 전환 | TOOLS.md 프로젝트 경로 업데이트 |  |
+| WT-03 | Agent 대화에서 프로젝트 컨텍스트 | Agent가 현재 프로젝트 경로 인식 |  |
+
+---
+
+## 12. Activity Bar & UI
 
 | # | 테스트 | 기대 결과 | Pass |
 |---|--------|-----------|------|
@@ -157,7 +186,7 @@
 
 ---
 
-## 11. Cross-Platform
+## 13. Cross-Platform
 
 | # | 테스트 | 기대 결과 | Pass |
 |---|--------|-----------|------|
@@ -172,15 +201,17 @@
 
 | 카테고리 | 항목 수 |
 |----------|---------|
-| Setup Wizard | 5 |
+| Setup Wizard | 14 |
 | Gateway | 4 |
 | Chat | 11 |
 | Status Bar | 6 |
 | Soul Explorer | 9 |
-| Checkpoint | 7 |
-| Swarm Memory | 17 |
+| Checkpoint | 9 |
+| Swarm Memory | 24 |
 | SoulScan | 3 |
 | Edit Soul | 3 |
+| Chat History | 3 |
+| Workspace Tracker | 3 |
 | UI | 5 |
 | Cross-Platform | 4 |
-| **Total** | **74** |
+| **Total** | **98** |
