@@ -68,11 +68,12 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 	}
 
 	/**
-	 * Swarm memory lives at ~/.openclaw/swarm/ — shared across all workspaces
+	 * Swarm memory lives at {stateDir}/swarm/ — shared across all workspaces
 	 * so multiple agents can access the same memory repository.
 	 */
 	private getSwarmDir(): string {
-		return path.join(os.homedir(), '.openclaw', 'swarm');
+		const { getSwarmDir } = require('../paths');
+		return getSwarmDir();
 	}
 
 	private detectSwarm(): void {

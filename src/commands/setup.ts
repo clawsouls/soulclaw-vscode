@@ -140,10 +140,8 @@ async function finishSetup(panel: vscode.WebviewPanel, data: any): Promise<void>
 }
 
 function getOpenClawWorkspaceDir(): string {
-	const stateDir = process.env.OPENCLAW_STATE_DIR;
-	if (stateDir) return path.join(stateDir, 'workspace');
-	const home = process.env.HOME || process.env.USERPROFILE || '';
-	return path.join(home, '.openclaw', 'workspace');
+	const { getWorkspaceDir } = require('../paths');
+	return getWorkspaceDir();
 }
 
 async function applySoulFromOnboarding(owner: string, name: string): Promise<void> {

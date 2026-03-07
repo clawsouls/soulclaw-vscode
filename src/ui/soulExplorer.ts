@@ -206,13 +206,8 @@ ${scan}
 	}
 
 	private getOpenClawWorkspaceDir(): string {
-		// Resolve OpenClaw workspace directory
-		const stateDir = process.env.OPENCLAW_STATE_DIR;
-		if (stateDir) {
-			return path.join(stateDir, 'workspace');
-		}
-		const home = process.env.HOME || process.env.USERPROFILE || '';
-		return path.join(home, '.openclaw', 'workspace');
+		const { getWorkspaceDir } = require('../paths');
+		return getWorkspaceDir();
 	}
 
 	private async applySoul(node: RemoteSoulNode): Promise<void> {

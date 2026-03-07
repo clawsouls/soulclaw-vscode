@@ -45,10 +45,11 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 
 	/** OpenClaw workspace where soul files live */
 	private getOpenClawWorkspaceDir(): string {
-		return path.join(os.homedir(), '.openclaw', 'workspace');
+		const { getWorkspaceDir } = require('../paths');
+		return getWorkspaceDir();
 	}
 
-	/** Checkpoints stored alongside soul files in ~/.openclaw/workspace/.clawsouls/checkpoints/ */
+	/** Checkpoints stored alongside soul files in {stateDir}/workspace/.clawsouls/checkpoints/ */
 	private getCheckpointDir(): string {
 		return path.join(this.getOpenClawWorkspaceDir(), '.clawsouls', 'checkpoints');
 	}
@@ -110,7 +111,7 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		}
 
 		if (existingFiles.length === 0) {
-			vscode.window.showWarningMessage('No soul files found in ~/.openclaw/workspace/.');
+			vscode.window.showWarningMessage('No soul files found in SoulClaw workspace.');
 			return;
 		}
 

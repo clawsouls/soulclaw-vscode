@@ -158,13 +158,14 @@ export class WorkspaceTracker {
 	}
 	
 	/**
-	 * Write current project info to ~/.openclaw/workspace/TOOLS.md
+	 * Write current project info to {stateDir}/workspace/TOOLS.md
 	 * so the LLM knows the active project path.
 	 */
 	private syncProjectToToolsMd(): void {
 		if (!this.context.workspacePath) return;
 
-		const toolsMdPath = path.join(os.homedir(), '.openclaw', 'workspace', 'TOOLS.md');
+		const { getWorkspaceDir } = require('../paths');
+		const toolsMdPath = path.join(getWorkspaceDir(), 'TOOLS.md');
 		const sectionHeader = '## Current Project';
 		const newSection = [
 			sectionHeader,

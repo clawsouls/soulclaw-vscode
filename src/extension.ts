@@ -9,6 +9,7 @@ import { SwarmProvider } from './ui/swarmPanel';
 import { ChatHistoryProvider } from './ui/chatHistoryPanel';
 import { setupWizard } from './commands/setup';
 import { GatewayLauncher } from './gateway/launcher';
+import { initStateDir } from './paths';
 
 export let gatewayConnection: GatewayConnection;
 export let gatewayLauncher: GatewayLauncher;
@@ -18,6 +19,8 @@ export let outputChannel: vscode.OutputChannel;
 
 export async function activate(context: vscode.ExtensionContext) {
 	_context = context;
+	// Initialize contained state directory
+	initStateDir(context);
 	// Create output channel (shows in OUTPUT panel Tasks dropdown)
 	outputChannel = vscode.window.createOutputChannel('SoulClaw');
 	context.subscriptions.push(outputChannel);

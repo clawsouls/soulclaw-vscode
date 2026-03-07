@@ -150,7 +150,7 @@ export class StatusBarManager {
 		const stateDir = process.env.OPENCLAW_STATE_DIR;
 		const openclawWs = stateDir
 			? path.join(stateDir, 'workspace')
-			: path.join(process.env.HOME || process.env.USERPROFILE || '', '.openclaw', 'workspace');
+			: (() => { const { getWorkspaceDir } = require('../paths'); return getWorkspaceDir(); })();
 		roots.push(openclawWs);
 
 		// VSCode workspace

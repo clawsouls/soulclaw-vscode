@@ -284,7 +284,7 @@ export class GatewayLauncher {
 				fs.mkdirSync(stateDir, { recursive: true });
 			}
 			// Write auth-profiles.json to BOTH contained state dir AND default ~/.openclaw/
-			// SoulClaw: dual-write for OPENCLAW_STATE_DIR in gateway mode
+			// Dual-write: SoulClaw gateway may read from default path as fallback
 			if (llmApiKey) {
 				const homeDir = process.env.HOME || process.env.USERPROFILE || '';
 				const authDirs = [
