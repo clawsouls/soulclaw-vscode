@@ -2,17 +2,29 @@
 
 Zero-setup AI agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools — powered by [OpenClaw](https://github.com/openclaw/openclaw).
 
-> ⚠️ **Early Preview** — This extension is under active development. Some features (Soul Explorer, Swarm Memory GUI, Checkpoint GUI) are not yet fully implemented. Expect breaking changes.
+> ⚠️ **Early Preview** — Under active development. Expect breaking changes.
 
 ## Features
 
-- 💬 **Chat Panel** — Talk to your AI agent directly in VSCode
-- 📁 **Soul Explorer** — Browse soul.json, SOUL.md, AGENTS.md, MEMORY.md *(coming soon)*
-- 🐝 **Swarm Memory** — Team AI knowledge collaboration *(coming soon)*
-- 📊 **Checkpoints** — Version and rollback agent state *(coming soon)*
-- 🔍 **SoulScan** — Security scanning for AI personas *(coming soon)*
-- ⚙️ **Setup Wizard** — Guided configuration (LLM, API key, Gateway port)
-- 🔌 **Contained Runtime** — OpenClaw runs inside VSCode, zero system pollution
+### ✅ Implemented
+
+- 💬 **Chat Panel** — Real-time AI chat in VSCode with streaming responses, message history, and session persistence
+- 🎭 **Soul Explorer** — Browse 85+ community souls from [ClawSouls](https://clawsouls.ai), search/filter by category, preview details, one-click apply
+- 🐝 **Swarm Memory** — Git-based team knowledge collaboration with branch management, push/pull, LLM-powered merge conflict resolution, age encryption
+- 📊 **Checkpoints** — Create, scan, compare, and restore agent state snapshots with contamination detection
+- 🔍 **SoulScan** — Run security scans on AI persona packages directly from the editor
+- ⚙️ **Setup Wizard** — 5-step guided onboarding (LLM provider → API key → port → soul selection → done)
+- 🎭 **Onboarding Soul Browser** — Dynamic soul picker during first-run setup, fetches live data from ClawSouls API with search, category filters, and popularity ranking
+- 🔌 **Contained Runtime** — OpenClaw installs into extension storage, zero system pollution, clean uninstall
+- 📋 **Chat History** — Browse and switch between past conversation sessions
+- 📍 **Status Bar** — Live soul name, agent branch, connection status, quick actions
+- 🔄 **Workspace Tracker** — Auto-syncs current project path to agent TOOLS.md for context awareness
+
+### 🚧 Planned
+
+- 🛒 VS Marketplace publishing
+- 🔐 Private soul management
+- 🤖 Multi-agent orchestration panel
 
 ## Requirements
 
@@ -24,83 +36,86 @@ Zero-setup AI agent with Soul-based personas, Swarm Memory collaboration, and in
 
 ### Step 1: Install Node.js 22+
 
-The extension auto-detects Node.js from nvm, fnm, volta, or system PATH. You only need Node 22+ installed — no need to set it as default.
+The extension auto-detects Node.js from nvm, fnm, volta, or system PATH.
 
 #### macOS / Linux
 
 ```bash
 # Using nvm (recommended)
 nvm install 24
-# That's it — extension finds it automatically
 ```
 
 #### Windows
 
 ```powershell
-# Using nvm-windows (https://github.com/coreybutler/nvm-windows)
+# Using nvm-windows
 nvm install 24.13.0 64
 nvm use 24.13.0
 ```
 
-> ⚠️ **Windows**: You must specify the architecture: `nvm install 24 64`. Without `64`, nvm-windows may fail with "version not available."
+> ⚠️ **Windows**: Specify architecture: `nvm install 24 64`. Without `64`, nvm-windows may fail.
 
-#### Direct Install (no version manager)
+#### Direct Install
 
-Download Node.js 24+ from [nodejs.org](https://nodejs.org/) and install.
-
-#### Verify
-
-```bash
-node --version
-# Should show v22.x.x or higher
-```
+Download Node.js 24+ from [nodejs.org](https://nodejs.org/).
 
 ### Step 2: (Optional) Set Up Ollama for Local LLM
 
-If you want to use a **local LLM instead of a cloud API**, install and start Ollama:
-
 ```bash
 # Install from https://ollama.com
-
-# Pull a model
 ollama pull llama3.2
-
-# Start the server (keep this running)
 ollama serve
 ```
 
-> 💡 **Windows users**: Ollama is the recommended setup. No API key needed, fully offline, and works with GPU acceleration (NVIDIA CUDA supported).
-
-### Step 3: Install & Configure the Extension
+### Step 3: Install & Configure
 
 1. Install the extension from `.vsix` or VS Marketplace
-2. Setup Wizard runs automatically on first launch
-3. Choose your LLM provider:
-   - **Anthropic** — Enter API key (`sk-ant-...`)
-   - **OpenAI** — Enter API key (`sk-...`)
-   - **Ollama** — Enter Ollama URL (`http://127.0.0.1:11434`) and model name (e.g. `llama3.2`)
-4. Configure Gateway port (default: 18789)
-5. Start chatting!
+2. Setup Wizard runs automatically on first launch:
+   - **Step 1**: Choose LLM provider (Anthropic / OpenAI / Ollama)
+   - **Step 2**: Enter API key or Ollama config
+   - **Step 3**: Configure Gateway port (default: 18789)
+   - **Step 4**: Browse and pick a soul from the community — search, filter by category, see download counts and scan scores
+   - **Step 5**: Done! Chat opens automatically
+3. Start building with your AI partner
 
-## How It Works
+## Panels
 
-The extension automatically:
-1. Finds Node.js 22+ on your system (nvm, fnm, volta, PATH)
-2. Installs OpenClaw into extension storage (`globalStorage/`)
-3. Starts the OpenClaw Gateway as a background process
-4. Connects via WebSocket for real-time chat
+### 💬 Chat
 
-Everything is contained — uninstalling the extension cleans up completely. No global npm packages, no PATH modifications, no leftover files.
+Full-featured chat with streaming, markdown rendering, code blocks, and persistent history. Messages are saved across sessions — switch between past conversations via the history panel.
+
+### 🎭 Soul Explorer
+
+- **Browse mode**: Souls grouped by category, sorted by downloads, with SoulScan badges
+- **Search**: Filter by name, description, or tags
+- **Preview**: View full soul details, files, and scan results
+- **Apply**: One-click apply to OpenClaw workspace with optional memory clear
+- **Local mode**: Toggle to see soul files in your current workspace
+
+### 📊 Checkpoints
+
+- **Create**: Snapshot current agent state (SOUL.md, MEMORY.md, etc.)
+- **Scan**: Run 4-layer contamination detection on any checkpoint
+- **Compare**: Diff two checkpoints to see what changed
+- **Restore**: Roll back to a previous state
+
+### 🐝 Swarm Memory
+
+- **Init/Join**: Create or join a shared swarm repository
+- **Push/Pull**: Sync memory changes with the team
+- **Branch**: Create topic branches for isolated exploration
+- **Merge**: LLM-powered semantic conflict resolution
+- **Encryption**: Age-based encryption for sensitive memory with key rotation
 
 ## Status Bar
 
 | Item | Description |
 |------|-------------|
 | 🔮 Soul Name | Current soul — click to chat |
-| 🐝 agent/main | Current agent branch |
+| 🐝 agent/main | Current swarm branch |
 | 🟢 connected | Gateway status — click for action |
 | 🔄 | Restart Gateway |
-| ⚙️ Setup | Re-run setup wizard |
+| ⚙️ | Re-run setup wizard |
 
 ## Settings
 
@@ -116,27 +131,30 @@ Everything is contained — uninstalling the extension cleans up completely. No 
 | `clawsouls.autoConnect` | `true` | Auto-connect on startup |
 | `clawsouls.showStatusBar` | `true` | Show status bar items |
 
-## File Locations
+## How It Works
 
-This extension writes files to the following locations:
+1. Extension finds Node.js 22+ on your system (nvm, fnm, volta, PATH)
+2. Installs OpenClaw into extension storage (`globalStorage/`)
+3. Starts the OpenClaw Gateway as a background process
+4. Connects via WebSocket for real-time chat
+
+Everything is contained — uninstalling cleans up completely.
+
+## File Locations
 
 | OS | Extension Storage | OpenClaw Config |
 |----|-------------------|-----------------|
-| **Windows** | `C:\Users\{username}\AppData\Roaming\Code\User\globalStorage\clawsouls.clawsouls-agent\` | `C:\Users\{username}\.openclaw\` |
+| **Windows** | `%APPDATA%\Code\User\globalStorage\clawsouls.clawsouls-agent\` | `%USERPROFILE%\.openclaw\` |
 | **macOS** | `~/Library/Application Support/Code/User/globalStorage/clawsouls.clawsouls-agent/` | `~/.openclaw/` |
 | **Linux** | `~/.config/Code/User/globalStorage/clawsouls.clawsouls-agent/` | `~/.openclaw/` |
 
-> ⚠️ **Note**: The extension may overwrite files in these directories. The `globalStorage` directory is managed by VSCode and cleaned up on uninstall. The `.openclaw` directory contains authentication tokens and agent configuration — it persists after uninstall.
-
 ## Disclaimer
 
-This extension is provided "as is" without warranty of any kind. It is an independent project by [ClawSouls](https://clawsouls.ai) and is **not officially affiliated with or endorsed by the OpenClaw project**. Use at your own risk. The authors are not responsible for any data loss, API charges, or other damages arising from the use of this software.
+This extension is provided "as is" without warranty of any kind. It is an independent project by [ClawSouls](https://clawsouls.ai) and is **not officially affiliated with or endorsed by the OpenClaw project**. Use at your own risk.
 
 ## License
 
-This extension is licensed under the **Apache License 2.0**.
-
-This extension embeds [OpenClaw](https://github.com/openclaw/openclaw), which is licensed under the **MIT License**. OpenClaw is an independent open-source project — its inclusion does not imply endorsement.
+**Apache License 2.0** (extension) + **MIT** (embedded OpenClaw runtime).
 
 See [LICENSE](LICENSE) for details.
 
@@ -145,4 +163,5 @@ See [LICENSE](LICENSE) for details.
 - [ClawSouls](https://clawsouls.ai) — AI persona platform
 - [Soul Spec](https://clawsouls.ai/spec) — Open persona specification
 - [Documentation](https://docs.clawsouls.ai) — Full docs
+- [Blog](https://blog.clawsouls.ai) — Guides & updates
 - [GitHub](https://github.com/clawsouls/clawsouls-vscode) — Source code & issues

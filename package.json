@@ -1,8 +1,8 @@
 {
   "name": "clawsouls-agent",
-  "displayName": "ClawSouls Agent \u2014 Soul-Powered AI Development",
+  "displayName": "ClawSouls Agent — Soul-Powered AI Development",
   "description": "Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "clawsouls",
   "icon": "media/icon.png",
   "engines": {
@@ -55,7 +55,7 @@
         },
         {
           "id": "clawsouls.soulExplorer",
-          "name": "\ud83d\udce6 Soul Explorer"
+          "name": "📦 Soul Explorer"
         },
         {
           "id": "clawsouls.swarm",
@@ -64,7 +64,7 @@
         },
         {
           "id": "clawsouls.checkpoints",
-          "name": "\ud83d\udcca Checkpoints"
+          "name": "📊 Checkpoints"
         }
       ]
     },
