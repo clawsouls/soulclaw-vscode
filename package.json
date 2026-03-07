@@ -180,6 +180,26 @@
       {
         "command": "clawsouls.connect",
         "title": "ClawSouls: Connect to Gateway"
+      },
+      {
+        "command": "soulclaw.askAboutCode",
+        "title": "SoulClaw: Ask About Code"
+      },
+      {
+        "command": "soulclaw.explainCode",
+        "title": "SoulClaw: Explain This"
+      },
+      {
+        "command": "soulclaw.fixCode",
+        "title": "SoulClaw: Fix This"
+      },
+      {
+        "command": "soulclaw.addToContext",
+        "title": "SoulClaw: Add to Context"
+      },
+      {
+        "command": "soulclaw.clearContext",
+        "title": "SoulClaw: Clear Context"
       }
     ],
     "menus": {
@@ -198,6 +218,28 @@
           "command": "clawsouls.refresh",
           "when": "view == clawsouls.soulExplorer || view == clawsouls.swarm || view == clawsouls.checkpoints",
           "group": "navigation@3"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "soulclaw.askAboutCode",
+          "group": "soulclaw@1",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "soulclaw.explainCode",
+          "group": "soulclaw@2",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "soulclaw.fixCode",
+          "group": "soulclaw@3",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "soulclaw.addToContext",
+          "group": "soulclaw@4",
+          "when": "editorHasSelection"
         }
       ],
       "view/item/context": [
@@ -228,6 +270,20 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "soulclaw.askAboutCode",
+        "key": "ctrl+shift+l",
+        "mac": "cmd+shift+l",
+        "when": "editorHasSelection"
+      },
+      {
+        "command": "soulclaw.addToContext",
+        "key": "ctrl+shift+;",
+        "mac": "cmd+shift+;",
+        "when": "editorHasSelection"
+      }
+    ],
     "configuration": {
       "title": "ClawSouls Agent",
       "properties": {

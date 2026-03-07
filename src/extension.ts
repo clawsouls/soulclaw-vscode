@@ -8,6 +8,8 @@ import { CheckpointProvider } from './ui/checkpointPanel';
 import { SwarmProvider } from './ui/swarmPanel';
 import { ChatHistoryProvider } from './ui/chatHistoryPanel';
 import { setupWizard } from './commands/setup';
+import { registerCodeActions } from './commands/codeActions';
+import { SoulClawCodeLensProvider } from './providers/codeLensProvider';
 import { initStateDir, getStateDir, getWorkspaceDir } from './paths';
 
 export let engine: SoulClawEngine;
@@ -68,6 +70,15 @@ export async function activate(context: vscode.ExtensionContext) {
 			await vscode.window.showTextDocument(doc);
 		}),
 	);
+	// Register code actions (Ask/Explain/Fix/AddToContext)
+	registerCodeActions(context);
+
+	// Register CodeLens provider
+	const codeLensProvider = new SoulClawCodeLensProvider();
+	context.subscriptions.push(
+		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, codeLensProvider)
+	);
+
 	outputChannel.appendLine('Commands registered');
 
 	try {

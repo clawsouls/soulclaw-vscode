@@ -10,6 +10,7 @@ export class ChatPanel {
 	private static readonly HISTORY_INDEX_KEY = 'clawsouls.chatHistoryIndex';
 	private static readonly MAX_HISTORY = 200;
 	private currentWorkspaceKey: string;
+	private contextItems: Array<{ label: string; snippet: any }> = [];
 	
 	constructor(
 		private context: vscode.ExtensionContext,
@@ -164,6 +165,22 @@ export class ChatPanel {
 		}
 	}
 
+	/** Send a message from external source (e.g. code actions) */
+	public sendFromExternal(text: string): void {
+		this.sendMessageToAgent(text);
+	}
+
+	/** Update context buffer display in chat panel */
+	public notifyContextUpdate(items: Array<{ label: string; snippet: any }>): void {
+		this.contextItems = items;
+		if (this.panel) {
+			this.panel.webview.postMessage({
+				type: 'contextUpdate',
+				items: items.map(i => i.label),
+			});
+		}
+	}
+
 	private handleWebviewMessage(message: any): void {
 		switch (message.type) {
 			case 'sendMessage':
@@ -177,6 +194,11 @@ export class ChatPanel {
 				break;
 			case 'switchHistory':
 				this.switchHistory();
+				break;
+			case 'clearContext':
+				this.contextItems = [];
+				const { clearContextBuffer } = require('../commands/codeActions');
+				clearContextBuffer();
 				break;
 		}
 	}
@@ -267,6 +289,13 @@ export class ChatPanel {
 				</div>
 				
 				<div class="input-area">
+					<div class="context-bar" id="contextBar" style="display:none;">
+						<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--vscode-editorWidget-background);border:1px solid var(--vscode-input-border);border-radius:4px 4px 0 0;font-size:12px;">
+							<span>📎 Context (<span id="contextCount">0</span> snippets)</span>
+							<button id="clearContextBtn" style="background:none;border:none;cursor:pointer;color:var(--vscode-foreground);opacity:0.7;font-size:11px;">Clear</button>
+						</div>
+						<div id="contextList" style="padding:4px 10px;background:var(--vscode-editorWidget-background);border:1px solid var(--vscode-input-border);border-top:none;border-radius:0 0 4px 4px;font-size:11px;max-height:60px;overflow-y:auto;"></div>
+					</div>
 					<div class="input-container">
 						<textarea id="messageInput" placeholder="Send a message to your soul-powered agent..."
 								  rows="2" maxlength="4000"></textarea>
@@ -290,6 +319,10 @@ export class ChatPanel {
 					});
 					document.getElementById('historyBtn').addEventListener('click', () => {
 						vscode.postMessage({ type: 'switchHistory' });
+					});
+					document.getElementById('clearContextBtn').addEventListener('click', () => {
+						vscode.postMessage({ type: 'clearContext' });
+						document.getElementById('contextBar').style.display = 'none';
 					});
 					
 					// Send message
@@ -371,6 +404,18 @@ export class ChatPanel {
 						if (message.type === 'clearStream') {
 							const streamEl = document.getElementById('streaming');
 							if (streamEl) streamEl.remove();
+						}
+						if (message.type === 'contextUpdate') {
+							const bar = document.getElementById('contextBar');
+							const list = document.getElementById('contextList');
+							const count = document.getElementById('contextCount');
+							if (message.items && message.items.length > 0) {
+								bar.style.display = 'block';
+								count.textContent = message.items.length;
+								list.innerHTML = message.items.map(i => '<div style="opacity:0.8;">├ ' + i + '</div>').join('');
+							} else {
+								bar.style.display = 'none';
+							}
 						}
 						if (message.type === 'stateUpdate') {
 							const statusEl = document.querySelector('.status');

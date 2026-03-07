@@ -32,7 +32,7 @@ export function setupWizard(): Promise<{ completed: boolean }> {
 		);
 
 		let currentStep = 1;
-		const maxSteps = 4;
+		const maxSteps = 5;
 		let selectedProvider = '';
 		let finished = false;
 
@@ -66,6 +66,17 @@ export function setupWizard(): Promise<{ completed: boolean }> {
 					finished = true;
 					panel.dispose();
 					resolve({ completed: true });
+					break;
+				case 'testTelegram':
+					try {
+						const result = await testTelegramConnection(message.data.botToken, message.data.chatId);
+						panel.webview.postMessage({ type: 'telegramTestResult', success: true, botName: result });
+					} catch (err: any) {
+						panel.webview.postMessage({ type: 'telegramTestResult', success: false, error: err.message });
+					}
+					break;
+				case 'saveTelegram':
+					await saveTelegramConfig(message.data.botToken, message.data.chatId);
 					break;
 				case 'fetchSouls':
 					try {
@@ -174,6 +185,75 @@ async function applySoulFromOnboarding(owner: string, name: string): Promise<voi
 	}
 }
 
+async function testTelegramConnection(botToken: string, chatId: string): Promise<string> {
+	return new Promise((resolve, reject) => {
+		// Test getMe
+		const url = `https://api.telegram.org/bot${botToken}/getMe`;
+		https.get(url, (res) => {
+			let data = '';
+			res.on('data', (chunk: string) => data += chunk);
+			res.on('end', () => {
+				try {
+					const parsed = JSON.parse(data);
+					if (!parsed.ok) {
+						reject(new Error(parsed.description || 'Invalid bot token'));
+						return;
+					}
+					const botName = parsed.result.first_name || parsed.result.username;
+					// Send test message if chatId provided
+					if (chatId) {
+						const msgUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+						const payload = JSON.stringify({ chat_id: chatId, text: '🔮 SoulClaw connected!' });
+						const req = https.request(msgUrl, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+						}, (res2) => {
+							let d2 = '';
+							res2.on('data', (c: string) => d2 += c);
+							res2.on('end', () => {
+								try {
+									const r = JSON.parse(d2);
+									if (r.ok) resolve(botName);
+									else reject(new Error(r.description || 'Failed to send test message'));
+								} catch { reject(new Error('Invalid response')); }
+							});
+						});
+						req.on('error', reject);
+						req.write(payload);
+						req.end();
+					} else {
+						resolve(botName);
+					}
+				} catch { reject(new Error('Invalid response from Telegram API')); }
+			});
+		}).on('error', reject);
+	});
+}
+
+async function saveTelegramConfig(botToken: string, chatId: string): Promise<void> {
+	const { getStateDir } = require('../paths');
+	const stateDir = getStateDir();
+	const configPath = path.join(stateDir, 'config.yaml');
+	
+	fs.mkdirSync(stateDir, { recursive: true });
+
+	// Read existing or create new
+	let content = '';
+	try { content = fs.readFileSync(configPath, 'utf8'); } catch {}
+
+	// Simple YAML append/replace for telegram channel
+	const telegramBlock = `\nchannels:\n  telegram:\n    adapter: telegram\n    token: "${botToken}"\n    allowedChatIds:\n      - "${chatId}"\n`;
+
+	if (content.includes('channels:')) {
+		// Replace existing channels block (simple approach)
+		content = content.replace(/\nchannels:[\s\S]*?(?=\n\w|\n$|$)/, telegramBlock);
+	} else {
+		content += telegramBlock;
+	}
+
+	fs.writeFileSync(configPath, content);
+}
+
 async function createCustomSoul(name: string): Promise<void> {
 	const workspaces = vscode.workspace.workspaceFolders;
 	if (!workspaces || workspaces.length === 0) {
@@ -238,7 +318,9 @@ function getWebviewContent(step: number, provider?: string): string {
 		case 3:
 			return getStep3Html();
 		case 4:
-			return getStep4Html();
+			return getStep4TelegramHtml();
+		case 5:
+			return getStep5CompleteHtml();
 		default:
 			return getStep1Html();
 	}
@@ -291,7 +373,7 @@ function getStep1Html(): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🔮 Welcome to SoulClaw</h1>
-					<p>Step 1 of 4: Choose your LLM provider</p>
+					<p>Step 1 of 5: Choose your LLM provider</p>
 				</div>
 				
 				<div class="provider-card" data-provider="anthropic">
@@ -393,7 +475,7 @@ function getStep2Html(provider?: string): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🏠 Ollama Configuration</h1>
-					<p>Step 2 of 4: Configure your local Ollama instance</p>
+					<p>Step 2 of 5: Configure your local Ollama instance</p>
 				</div>
 
 				<div class="config-section">
@@ -480,7 +562,7 @@ function getStep2Html(provider?: string): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🔑 Authentication</h1>
-					<p>Step 2 of 4: Set up your ${providerName} API access</p>
+					<p>Step 2 of 5: Set up your ${providerName} API access</p>
 				</div>
 
 				<div class="auth-option">
@@ -571,7 +653,7 @@ function getStep3Html(): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🎭 Choose Your Soul</h1>
-					<p>Step 3 of 4: Pick an AI persona from the community</p>
+					<p>Step 3 of 5: Pick an AI persona from the community</p>
 				</div>
 
 				<input class="search-bar" id="searchInput" type="text" placeholder="Search souls..." />
@@ -719,13 +801,155 @@ function getStep3Html(): string {
 	`;
 }
 
-function getStep4Html(): string {
+function getStep4TelegramHtml(): string {
 	return `
 		<!DOCTYPE html>
 		<html>
 		<head>
 			<meta charset="UTF-8">
-			<title>ClawSouls Setup - Complete</title>
+			<title>SoulClaw Setup - Telegram</title>
+			<style>
+				body { font-family: var(--vscode-font-family); padding: 20px; }
+				.container { max-width: 600px; margin: 0 auto; }
+				.step-header { text-align: center; margin-bottom: 30px; }
+				.config-section {
+					border: 1px solid var(--vscode-input-border);
+					border-radius: 8px;
+					padding: 20px;
+					margin: 15px 0;
+				}
+				input[type="text"] {
+					width: 100%;
+					padding: 8px;
+					border: 1px solid var(--vscode-input-border);
+					background: var(--vscode-input-background);
+					color: var(--vscode-input-foreground);
+					border-radius: 4px;
+					margin-top: 8px;
+					box-sizing: border-box;
+				}
+				.hint { color: var(--vscode-descriptionForeground); font-size: 12px; margin-top: 6px; }
+				.buttons { text-align: center; margin-top: 30px; }
+				button {
+					margin: 0 10px;
+					padding: 10px 20px;
+					border: none;
+					background: var(--vscode-button-background);
+					color: var(--vscode-button-foreground);
+					border-radius: 4px;
+					cursor: pointer;
+				}
+				.test-btn {
+					background: var(--vscode-button-secondaryBackground);
+					color: var(--vscode-button-secondaryForeground);
+					margin-top: 12px;
+				}
+				.test-result { margin-top: 10px; padding: 8px; border-radius: 4px; font-size: 13px; display: none; }
+				.test-success { background: rgba(0,200,0,0.15); color: #4caf50; }
+				.test-error { background: rgba(255,0,0,0.15); color: #f44336; }
+				.steps-list { margin: 10px 0; padding-left: 20px; }
+				.steps-list li { margin: 6px 0; }
+				code { background: var(--vscode-textCodeBlock-background); padding: 2px 6px; border-radius: 3px; }
+			</style>
+		</head>
+		<body>
+			<div class="container">
+				<div class="step-header">
+					<h1>🔗 Connect Telegram</h1>
+					<p>Step 4 of 5: Get notifications via Telegram (optional)</p>
+				</div>
+
+				<div class="config-section">
+					<h3>How to set up</h3>
+					<ol class="steps-list">
+						<li>Open Telegram and search for <code>@BotFather</code></li>
+						<li>Send <code>/newbot</code> and follow the prompts</li>
+						<li>Copy the bot token below</li>
+						<li>Start a chat with your new bot, then send any message</li>
+						<li>Click "Test Connection" to verify</li>
+					</ol>
+				</div>
+
+				<div class="config-section">
+					<h3>Bot Token</h3>
+					<input type="text" id="botToken" placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz" />
+					<div class="hint">From @BotFather after creating your bot</div>
+				</div>
+
+				<div class="config-section">
+					<h3>Chat ID</h3>
+					<input type="text" id="chatId" placeholder="123456789" />
+					<div class="hint">Your Telegram user ID or group chat ID</div>
+
+					<button class="test-btn" onclick="testConnection()">🔗 Test Connection</button>
+					<div class="test-result" id="testResult"></div>
+				</div>
+
+				<div class="buttons">
+					<button onclick="back()">← Back</button>
+					<button onclick="skipTelegram()">Skip</button>
+					<button onclick="saveTelegram()">Save & Continue →</button>
+				</div>
+			</div>
+
+			<script>
+				const vscode = acquireVsCodeApi();
+
+				function testConnection() {
+					const botToken = document.getElementById('botToken').value.trim();
+					const chatId = document.getElementById('chatId').value.trim();
+					if (!botToken) { showResult(false, 'Enter a bot token first'); return; }
+					showResult(null, 'Testing...');
+					vscode.postMessage({ type: 'testTelegram', data: { botToken, chatId } });
+				}
+
+				function showResult(success, text) {
+					const el = document.getElementById('testResult');
+					el.style.display = 'block';
+					el.className = 'test-result ' + (success === null ? '' : success ? 'test-success' : 'test-error');
+					el.textContent = text;
+				}
+
+				window.addEventListener('message', event => {
+					const msg = event.data;
+					if (msg.type === 'telegramTestResult') {
+						if (msg.success) {
+							showResult(true, '✅ Connected to bot: ' + msg.botName);
+						} else {
+							showResult(false, '❌ ' + (msg.error || 'Connection failed'));
+						}
+					}
+				});
+
+				function saveTelegram() {
+					const botToken = document.getElementById('botToken').value.trim();
+					const chatId = document.getElementById('chatId').value.trim();
+					if (botToken && chatId) {
+						vscode.postMessage({ type: 'saveTelegram', data: { botToken, chatId } });
+					}
+					vscode.postMessage({ type: 'next', data: {} });
+				}
+
+				function skipTelegram() {
+					vscode.postMessage({ type: 'next', data: {} });
+				}
+
+				function back() {
+					vscode.postMessage({ type: 'back' });
+				}
+			</script>
+		</body>
+		</html>
+	`;
+}
+
+function getStep5CompleteHtml(): string {
+	return `
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<meta charset="UTF-8">
+			<title>SoulClaw Setup - Complete</title>
 			<style>
 				body { font-family: var(--vscode-font-family); padding: 20px; }
 				.container { max-width: 600px; margin: 0 auto; text-align: center; }
