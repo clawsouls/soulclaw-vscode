@@ -57,6 +57,13 @@
 | C-09 | 파일 drag & drop | 파일 내용 텍스트에 삽입 (100KB 이하) |  |
 | C-10 | 100KB 초과 파일 drag & drop | 경고 메시지 |  |
 | C-11 | 스트리밍 응답 중 | "typing..." 인디케이터 표시 |  |
+| C-12 | 코드블록 Apply 버튼 클릭 | Diff 프리뷰 표시 → Accept/Reject 선택 |  |
+| C-13 | Apply → Accept 선택 | 코드가 에디터/파일에 적용 |  |
+| C-14 | Apply → Reject 선택 | 변경 취소, 원본 유지 |  |
+| C-15 | 응답 중 Stop 버튼 클릭 | 스트리밍 즉시 중단, 부분 응답 표시 |  |
+| C-16 | 대화 내보내기 (Markdown) | 파일 저장 다이얼로그 → .md 파일 저장 |  |
+| C-17 | 대화 내보내기 (JSON) | 파일 저장 다이얼로그 → .json 파일 저장 |  |
+| C-18 | Tool 실행 로그 표시 | 🔧 도구명 + 인자 + 결과 실시간 표시 |  |
 
 ---
 
@@ -143,10 +150,29 @@
 | SC-01 | "ClawSouls: Run SoulScan" 실행 | 터미널에서 `npx clawsouls scan` 실행 |  |
 | SC-02 | soul.json 있는 프로젝트에서 실행 | 스캔 결과 터미널 출력 |  |
 | SC-03 | soul.json 없는 프로젝트에서 실행 | 에러 메시지 |  |
+| SC-04 | soul.json 저장 시 자동 스캔 | `scanOnSave` 설정 켜진 상태 → 저장 시 스캔 자동 실행 |  |
+| SC-05 | `scanOnSave` 끈 상태에서 저장 | 스캔 실행 안됨 |  |
 
 ---
 
-## 9. Edit Soul
+## 9. Security & Safety
+
+| # | 테스트 | 기대 결과 | Pass |
+|---|--------|-----------|------|
+| SEC-01 | API key 저장 확인 | SecretStorage에 저장됨 (Settings에 평문 아님) |  |
+| SEC-02 | 이전 Settings API key → SecretStorage 자동 마이그레이션 | 기존 유저 자동 이전 |  |
+| SEC-03 | `rm -rf /` 명령 실행 요청 | 확인 다이얼로그 표시, 거부 가능 |  |
+| SEC-04 | `sudo` 명령 실행 요청 | 확인 다이얼로그 표시 |  |
+| SEC-05 | `git push --force` 실행 요청 | 확인 다이얼로그 표시 |  |
+| SEC-06 | 워크스페이스 외부 파일 쓰기 시도 | 차단 + 에러 메시지 |  |
+| SEC-07 | `.env` 파일 읽기 시도 | 경고 메시지 표시 |  |
+| SEC-08 | `credentials`, `id_rsa` 등 민감 파일 | 경고 메시지 표시 |  |
+| SEC-09 | S-12: Setup에서 API key Validate 버튼 | 실제 API 호출 → 성공/실패 피드백 |  |
+| SEC-10 | 잘못된 API key Validate | "Invalid API key" 에러 표시 |  |
+
+---
+
+## 10. Edit Soul
 
 | # | 테스트 | 기대 결과 | Pass |
 |---|--------|-----------|------|
@@ -156,7 +182,7 @@
 
 ---
 
-## 10. Chat History
+## 11. Chat History
 
 | # | 테스트 | 기대 결과 | Pass |
 |---|--------|-----------|------|
@@ -166,7 +192,7 @@
 
 ---
 
-## 11. Workspace Tracker
+## 12. Workspace Tracker
 
 | # | 테스트 | 기대 결과 | Pass |
 |---|--------|-----------|------|
@@ -176,7 +202,66 @@
 
 ---
 
-## 12. Activity Bar & UI
+## 13. Code Actions
+
+| # | 테스트 | 기대 결과 | Pass |
+|---|--------|-----------|------|
+| CA-01 | 코드 선택 → 우클릭 → "Ask SoulClaw" | Chat에 선택 코드 + 질문 프롬프트 |  |
+| CA-02 | 코드 선택 → 우클릭 → "Explain This" | Chat에 코드 설명 요청 |  |
+| CA-03 | 코드 선택 → 우클릭 → "Fix This" | Chat에 코드 수정 요청 |  |
+| CA-04 | 코드 선택 → 우클릭 → "Add to Context" | Context buffer에 추가, Chat에 알림 |  |
+| CA-05 | Context buffer에 여러 코드 추가 → Send | 모든 context가 메시지에 포함 |  |
+| CA-06 | "Clear Context" 실행 | Context buffer 초기화 |  |
+| CA-07 | Cmd+Shift+L 키 바인딩 | Ask SoulClaw 실행 |  |
+| CA-08 | Cmd+Shift+; 키 바인딩 | Add to Context 실행 |  |
+| CA-09 | 우클릭 → "Refactor" | Chat에 리팩토링 요청 |  |
+| CA-10 | 우클릭 → "Generate Test" | Chat에 테스트 코드 생성 요청 |  |
+| CA-11 | 우클릭 → "Generate Docs" | Chat에 JSDoc/docstring 생성 요청 |  |
+| CA-12 | CodeLens: 함수 위 "Ask SoulClaw" 클릭 | 함수 본문 자동 선택 → Chat에 전송 |  |
+| CA-13 | CodeLens: TypeScript 파일 | 함수/클래스 위에 CodeLens 표시 |  |
+| CA-14 | CodeLens: Python 파일 | def/class 위에 CodeLens 표시 |  |
+| CA-15 | `codeLensEnabled` 끈 상태 | CodeLens 미표시 |  |
+
+---
+
+## 14. Tool Calling
+
+| # | 테스트 | 기대 결과 | Pass |
+|---|--------|-----------|------|
+| TC-01 | "이 프로젝트 파일 목록 보여줘" | list_files 도구 실행, 결과 표시 |  |
+| TC-02 | "src/index.ts 읽어줘" | read_file 실행, 내용 표시 |  |
+| TC-03 | "새 파일 만들어줘" | write_file 실행, 파일 생성 + 에디터 자동 열림 |  |
+| TC-04 | "이 함수 수정해줘" | edit_file 실행, 수정 + 에디터 자동 열림 |  |
+| TC-05 | "TODO 검색해줘" | search_files 실행, grep 결과 |  |
+| TC-06 | "npm test 실행해줘" | run_command 실행, 30초 타임아웃 |  |
+| TC-07 | Multi-turn tool use | 도구 결과 → 추가 도구 호출 → 최종 응답 (최대 10라운드) |  |
+| TC-08 | Anthropic provider tool calling | tool_use 블록 정상 파싱 |  |
+| TC-09 | OpenAI provider tool calling | function_call 정상 파싱 |  |
+| TC-10 | 파일 생성 후 에디터 열림 | write_file 완료 → 해당 파일 에디터 탭 열림 |  |
+
+---
+
+## 15. Checkpoint (Auto)
+
+| # | 테스트 | 기대 결과 | Pass |
+|---|--------|-----------|------|
+| CPA-01 | SOUL.md 수정 → 저장 | 자동 체크포인트 생성 |  |
+| CPA-02 | 자동 체크포인트 라벨 | "auto: SOUL.md changed" 형태 |  |
+| CPA-03 | 자동 체크포인트 패널 표시 | Checkpoint 패널에 auto-생성 항목 보임 |  |
+
+---
+
+## 16. Token & Status
+
+| # | 테스트 | 기대 결과 | Pass |
+|---|--------|-----------|------|
+| TS-01 | 대화 진행 중 토큰 카운트 | Status bar에 "~1.2k tokens" 형태 표시 |  |
+| TS-02 | 새 세션 시작 시 | 토큰 카운트 리셋 |  |
+| TS-03 | 긴 대화 시 | 토큰 수 증가 반영 |  |
+
+---
+
+## 17. Activity Bar & UI
 
 | # | 테스트 | 기대 결과 | Pass |
 |---|--------|-----------|------|
@@ -188,7 +273,7 @@
 
 ---
 
-## 13. Cross-Platform
+## 18. Cross-Platform
 
 | # | 테스트 | 기대 결과 | Pass |
 |---|--------|-----------|------|
@@ -201,19 +286,24 @@
 
 ## Summary
 
-| 카테고리 | 항목 수 |
-|----------|---------|
-| Setup Wizard | 15 |
-| Engine | 5 |
-| Chat | 11 |
-| Status Bar | 6 |
-| Soul Explorer | 9 |
-| Checkpoint | 9 |
-| Swarm Memory | 24 |
-| SoulScan | 3 |
-| Edit Soul | 3 |
-| Chat History | 3 |
-| Workspace Tracker | 3 |
-| UI | 5 |
-| Cross-Platform | 4 |
-| **Total** | **100** |
+| # | 카테고리 | 항목 수 |
+|---|----------|---------|
+| 1 | Setup Wizard | 15 |
+| 2 | Engine | 5 |
+| 3 | Chat Panel | 18 |
+| 4 | Status Bar | 6 |
+| 5 | Soul Explorer | 9 |
+| 6 | Checkpoint | 9 |
+| 7 | Swarm Memory | 24 |
+| 8 | SoulScan | 5 |
+| 9 | Security & Safety | 10 |
+| 10 | Edit Soul | 3 |
+| 11 | Chat History | 3 |
+| 12 | Workspace Tracker | 3 |
+| 13 | Code Actions | 15 |
+| 14 | Tool Calling | 10 |
+| 15 | Checkpoint (Auto) | 3 |
+| 16 | Token & Status | 3 |
+| 17 | Activity Bar & UI | 5 |
+| 18 | Cross-Platform | 4 |
+| | **Total** | **150** |
