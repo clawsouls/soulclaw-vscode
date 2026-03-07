@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
-import { GatewayConnection, ConnectionState } from '../gateway/connection';
+import type { SoulClawEngine } from '../engine';
+
+type ConnectionState = string;
 
 export class StatusBarManager {
 	private chatItem: vscode.StatusBarItem;
@@ -11,7 +13,7 @@ export class StatusBarManager {
 	
 	constructor(
 		private context: vscode.ExtensionContext,
-		private gateway: GatewayConnection
+		private engine: SoulClawEngine
 	) {
 		// Create status bar items
 		this.chatItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 101);
@@ -24,8 +26,11 @@ export class StatusBarManager {
 		this.setupStatusItems();
 		this.updateStatusBar();
 		
-		// Listen for connection state changes
-		this.gateway.onStateChanged(this.onConnectionStateChanged.bind(this));
+		// Listen for engine state changes
+		this.engine.on('stateChange', (state: string) => {
+			const mapped = state === 'ready' ? 'connected' : state === 'running' ? 'connected' : state;
+			this.onConnectionStateChanged(mapped);
+		});
 		
 		// Watch for soul.json changes to update status bar
 		const soulWatcher = vscode.workspace.createFileSystemWatcher('**/soul.json');

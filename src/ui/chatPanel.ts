@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { marked } from 'marked';
-import { GatewayConnection, GatewayMessage } from '../gateway/connection';
+import type { SoulClawEngine } from '../engine';
 import { workspaceTracker } from '../extension';
 
 export class ChatPanel {
@@ -13,7 +13,7 @@ export class ChatPanel {
 	
 	constructor(
 		private context: vscode.ExtensionContext,
-		private gateway: GatewayConnection
+		private engine: SoulClawEngine
 	) {
 		// Workspace-specific history key
 		const ws = vscode.workspace.workspaceFolders;
@@ -29,13 +29,30 @@ export class ChatPanel {
 		// Track this workspace in the index
 		this.updateHistoryIndex(wsName);
 
-		// Listen for Gateway messages
-		this.gateway.onMessage(this.handleGatewayMessage.bind(this));
-		
-		// Listen for connection state changes
-		this.gateway.onStateChanged((state) => {
+		// Listen for engine events
+		this.engine.on('delta', (text: string) => {
 			if (this.panel) {
-				this.panel.webview.postMessage({ type: 'stateUpdate', state });
+				this.panel.webview.postMessage({ type: 'streamUpdate', text });
+			}
+		});
+
+		this.engine.on('final', (message: any) => {
+			if (this.panel) {
+				this.panel.webview.postMessage({ type: 'clearStream' });
+			}
+			if (message?.content) {
+				this.addMessage('assistant', message.content);
+			}
+		});
+
+		this.engine.on('error', (err: Error) => {
+			this.addMessage('assistant', `Error: ${err.message}`);
+		});
+
+		this.engine.on('stateChange', (state: string) => {
+			const mappedState = state === 'ready' ? 'connected' : state === 'running' ? 'connected' : state;
+			if (this.panel) {
+				this.panel.webview.postMessage({ type: 'stateUpdate', state: mappedState });
 			}
 		});
 	}
@@ -44,7 +61,8 @@ export class ChatPanel {
 		if (this.panel) {
 			this.panel.reveal();
 			// Re-send current state on reveal
-			this.panel.webview.postMessage({ type: 'stateUpdate', state: this.gateway.currentState });
+			const state = this.engine.state === 'ready' ? 'connected' : this.engine.state;
+			this.panel.webview.postMessage({ type: 'stateUpdate', state });
 			return;
 		}
 		
@@ -163,125 +181,16 @@ export class ChatPanel {
 		}
 	}
 	
-	private currentRunId: string | null = null;
-	private streamBuffer: string = '';
-
-	private handleGatewayMessage(message: GatewayMessage): void {
-		// Handle chat events from gateway
-		if (message.type === 'event' && message.event === 'chat') {
-			const payload = message.payload as any;
-			if (!payload) return;
-
-			const state = payload.state;
-			if (state === 'delta') {
-				// Streaming delta — extract text from message
-				const text = this.extractText(payload.message);
-				if (text) {
-					this.streamBuffer = text;
-					this.updateStreamingMessage();
-				}
-			} else if (state === 'final') {
-				// Final — fetch full chat history to get the actual response
-				this.streamBuffer = '';
-				this.currentRunId = null;
-				this.fetchLatestResponse();
-			} else if (state === 'error') {
-				this.streamBuffer = '';
-				this.currentRunId = null;
-				this.addMessage('assistant', `Error: ${payload.errorMessage || 'unknown error'}`);
-			} else if (state === 'aborted') {
-				this.streamBuffer = '';
-				this.currentRunId = null;
-				this.addMessage('assistant', '(aborted)');
-			}
-		}
-	}
-
-	private async fetchLatestResponse(): Promise<void> {
-		try {
-			const history = await this.gateway.requestRPC('chat.history', {
-				sessionKey: this.gateway.sessionKey,
-				limit: 10
-			});
-			// Debug: log raw history response
-			const { outputChannel } = require('../extension');
-			outputChannel?.appendLine(`chat.history response keys: ${JSON.stringify(Object.keys(history || {}))}`);
-			
-			const messages = history?.messages;
-			outputChannel?.appendLine(`messages count: ${Array.isArray(messages) ? messages.length : 'not array'}`);
-			
-			if (Array.isArray(messages) && messages.length > 0) {
-				// Log ALL messages for debugging
-				for (let j = 0; j < messages.length; j++) {
-					const m = messages[j];
-					outputChannel?.appendLine(`msg[${j}]: role=${m?.role} content=${JSON.stringify(m?.content)?.slice(0, 500)}`);
-				}
-				const last = messages[messages.length - 1];
-				
-				// Find last assistant message
-				for (let i = messages.length - 1; i >= 0; i--) {
-					const msg = messages[i];
-					if (msg.role === 'assistant') {
-						const text = this.extractText(msg);
-						outputChannel?.appendLine(`extractText result: ${text?.slice(0, 100) || 'null'}`);
-						if (text) {
-							this.addMessage('assistant', text);
-							return;
-						}
-					}
-				}
-			}
-			this.addMessage('assistant', '(no response)');
-		} catch (err: any) {
-			const { outputChannel } = require('../extension');
-			outputChannel?.appendLine(`chat.history error: ${err.message}`);
-			this.addMessage('assistant', `(failed to fetch: ${err.message})`);
-		}
-	}
-
-	private extractText(message: any): string | null {
-		if (!message) return null;
-		const content = message.content;
-		if (typeof content === 'string') return content;
-		if (Array.isArray(content)) {
-			// Try text blocks first, then any block with text
-			const texts = content
-				.filter((b: any) => typeof b.text === 'string')
-				.map((b: any) => b.text);
-			if (texts.length > 0) return texts.join('\n');
-			// Fallback: stringify non-empty content
-			if (content.length > 0) return JSON.stringify(content);
-			return null;
-		}
-		if (typeof content === 'object' && content !== null) {
-			return JSON.stringify(content);
-		}
-		return null;
-	}
-
-	private updateStreamingMessage(): void {
-		if (this.panel) {
-			this.panel.webview.postMessage({
-				type: 'streamUpdate',
-				text: this.streamBuffer
-			});
-		}
-	}
-
 	private async sendMessageToAgent(text: string): Promise<void> {
 		// Add user message to chat
 		this.addMessage('user', text);
 
-		// Generate idempotency key
-		const idempotencyKey = crypto.randomUUID();
-		this.currentRunId = idempotencyKey;
-		this.streamBuffer = '';
-
-		// Send via chat.send RPC
+		// Send directly to engine — streaming handled via engine events
 		try {
-			await this.gateway.sendChat(text, undefined);
+			await this.engine.sendMessage(text);
+			// final event handler adds the assistant message
 		} catch (err: any) {
-			this.addMessage('assistant', `Failed to send: ${err.message}`);
+			// error event handler adds the error message
 		}
 	}
 	
@@ -329,7 +238,7 @@ export class ChatPanel {
 			`;
 		}).join('');
 		
-		const gatewayStatus = this.gateway.currentState;
+		const gatewayStatus = this.engine.state === 'ready' ? 'connected' : this.engine.state;
 		const statusColor = this.getStatusColor(gatewayStatus);
 		
 		this.panel.webview.html = `
