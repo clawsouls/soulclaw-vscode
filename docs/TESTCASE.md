@@ -21,22 +21,24 @@
 | S-07 | Step 4: 검색 입력 | 이름/설명/태그로 실시간 필터링 |  |
 | S-08 | Step 4: 카테고리 필터 클릭 | 해당 카테고리만 표시 |  |
 | S-09 | Step 4: 인기 soul ⭐ 배지 | 상위 3개에 "Popular" 배지 표시 |  |
-| S-10 | Step 4: Soul 카드 클릭 → Next | 선택한 soul이 OpenClaw workspace에 apply |  |
-| S-11 | Step 4: "Create Custom" 선택 → Next | Custom soul 생성 플로우 |  |
-| S-12 | Step 4: "Start Empty" 선택 → Next | Soul 없이 진행 |  |
-| S-13 | Step 4: 다운로드 수/스캔 상태 표시 | 각 카드에 ⬇ count, ✅/⚠️ 배지 |  |
-| S-14 | Step 4: API 장애 시 | "No souls found" 표시, Custom/Empty로 진행 가능 |  |
+| S-10 | Step 3: Soul 카드 클릭 → Next | 선택한 soul이 workspace에 apply |  |
+| S-11 | Step 3: "Create Custom" 선택 → Next | Custom soul 생성 플로우 |  |
+| S-12 | Step 3: "Start Empty" 선택 → Next | Soul 없이 진행 |  |
+| S-13 | Step 3: 다운로드 수/스캔 상태 표시 | 각 카드에 ⬇ count, ✅/⚠️ 배지 |  |
+| S-14 | Step 3: API 장애 시 | "No souls found" 표시, Custom/Empty로 진행 가능 |  |
+| S-15 | Port 설정 단계 없음 | 4단계 wizard (Provider → Key → Soul → Done) |  |
 
 ---
 
-## 2. Gateway Connection
+## 2. Engine
 
 | # | 테스트 | 기대 결과 | Pass |
 |---|--------|-----------|------|
-| G-01 | Setup 완료 후 | Status bar "🟢 connected" 표시 |  |
-| G-02 | Gateway 연결 끊김 | Status bar "⚪ disconnected" 표시 |  |
-| G-03 | "🔄" 버튼 클릭 | Gateway 재시작, 재연결 |  |
-| G-04 | Chat 패널에서 연결 상태 확인 | "● Gateway: connected" 실시간 업데이트 |  |
+| E-01 | Setup 완료 후 | Status bar "🟢 connected" 표시 (engine ready) |  |
+| E-02 | API key 없음/잘못됨 | Status bar "🔴 error" 표시 |  |
+| E-03 | "🔄" 버튼 클릭 | Engine 재시작 |  |
+| E-04 | Chat 패널에서 상태 확인 | "● Engine: connected" 실시간 업데이트 |  |
+| E-05 | Extension 활성화 즉시 | Engine 즉시 ready (npm install/WS 대기 없음) |  |
 
 ---
 
@@ -201,8 +203,8 @@
 
 | 카테고리 | 항목 수 |
 |----------|---------|
-| Setup Wizard | 14 |
-| Gateway | 4 |
+| Setup Wizard | 15 |
+| Engine | 5 |
 | Chat | 11 |
 | Status Bar | 6 |
 | Soul Explorer | 9 |
@@ -214,4 +216,4 @@
 | Workspace Tracker | 3 |
 | UI | 5 |
 | Cross-Platform | 4 |
-| **Total** | **98** |
+| **Total** | **100** |
