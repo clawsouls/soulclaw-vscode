@@ -11,6 +11,7 @@ import { setupWizard } from './commands/setup';
 import { registerCodeActions } from './commands/codeActions';
 import { SoulClawCodeLensProvider } from './providers/codeLensProvider';
 import { initStateDir, getStateDir, getWorkspaceDir } from './paths';
+import { TelegramRelay } from './integrations/telegram';
 
 export let engine: SoulClawEngine;
 export let chatPanel: ChatPanel;
@@ -24,7 +25,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Create output channel
 	outputChannel = vscode.window.createOutputChannel('SoulClaw');
 	context.subscriptions.push(outputChannel);
-	outputChannel.appendLine('SoulClaw v0.5.0 activated (embedded engine)');
+	outputChannel.appendLine('SoulClaw v0.6.0 activated (embedded engine)');
 
 	// Register commands
 	context.subscriptions.push(
@@ -41,12 +42,29 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('clawsouls.restartGateway', () => restartEngine()),
 		vscode.commands.registerCommand('clawsouls.connect', () => restartEngine()),
 		vscode.commands.registerCommand('clawsouls.runScan', async () => {
-			const ws = vscode.workspace.workspaceFolders;
-			if (!ws) { vscode.window.showWarningMessage('No workspace open'); return; }
-			const dir = ws[0].uri.fsPath;
-			const terminal = vscode.window.createTerminal({ name: 'SoulScan', cwd: dir });
-			terminal.show();
-			terminal.sendText('npx clawsouls scan');
+			const { scanSoulFiles } = require('./engine/soulscan');
+			const scanDir = getWorkspaceDir();
+			const result = scanSoulFiles(scanDir);
+
+			if (result.fileCount === 0) {
+				vscode.window.showWarningMessage('No soul files found to scan.');
+				return;
+			}
+
+			const detail = result.issues.length > 0
+				? result.issues.map((i: any) => `${i.severity === 'error' ? '❌' : i.severity === 'warning' ? '⚠️' : 'ℹ️'} [${i.rule}] ${i.message}${i.file ? ` (${i.file}:${i.line})` : ''}`).join('\n')
+				: '✅ No issues found';
+
+			const msg = `SoulScan: ${result.grade} (${result.score}/100) — ${result.fileCount} files, ${result.issues.length} issue(s)`;
+			
+			if (result.score >= 75) {
+				vscode.window.showInformationMessage(msg, { detail, modal: result.issues.length > 0 } as any);
+			} else {
+				vscode.window.showWarningMessage(msg, { detail, modal: true } as any);
+			}
+
+			// Update status bar scan badge
+			outputChannel.appendLine(`SoulScan result: ${result.grade} (${result.score}/100), ${result.issues.length} issues`);
 		}),
 		vscode.commands.registerCommand('clawsouls.editSoul', async () => {
 			const ws = vscode.workspace.workspaceFolders;
@@ -118,6 +136,47 @@ export async function activate(context: vscode.ExtensionContext) {
 			treeDataProvider: checkpointProvider
 		});
 
+		// Auto-checkpoint on soul file save
+		const soulFileWatcher = vscode.workspace.createFileSystemWatcher('**/SOUL.md');
+		soulFileWatcher.onDidChange(async () => {
+			const config = vscode.workspace.getConfiguration('clawsouls');
+			outputChannel.appendLine('Soul file changed — creating auto-checkpoint');
+			try {
+				await vscode.commands.executeCommand('clawsouls.createCheckpoint');
+			} catch {}
+		});
+		context.subscriptions.push(soulFileWatcher);
+
+		// Scan-on-save
+		context.subscriptions.push(
+			vscode.workspace.onDidSaveTextDocument(async (doc) => {
+				const config = vscode.workspace.getConfiguration('clawsouls');
+				if (!config.get('scanOnSave', true)) return;
+				if (doc.fileName.endsWith('soul.json') || doc.fileName.endsWith('SOUL.md')) {
+					outputChannel.appendLine(`SoulScan triggered by save: ${doc.fileName}`);
+					// Lightweight inline scan — just check for obvious issues
+					const content = doc.getText();
+					const issues: string[] = [];
+					if (content.includes('sk-ant-') || content.includes('sk-')) {
+						issues.push('⚠️ Possible API key detected in soul file');
+					}
+					if (content.length > 50000) {
+						issues.push('⚠️ File exceeds 50KB — consider splitting');
+					}
+					if (issues.length > 0) {
+						vscode.window.showWarningMessage(`SoulScan: ${issues.join('; ')}`);
+					}
+				}
+			})
+		);
+
+		// Stop generation command
+		context.subscriptions.push(
+			vscode.commands.registerCommand('soulclaw.stopGeneration', () => {
+				engine.abort();
+			})
+		);
+
 		// Watch config changes — auto restart engine
 		context.subscriptions.push(
 			vscode.workspace.onDidChangeConfiguration(e => {
@@ -135,6 +194,21 @@ export async function activate(context: vscode.ExtensionContext) {
 			const result = await setupWizard();
 			context.globalState.update('hasSetup', true);
 			outputChannel.appendLine(`Setup ${result.completed ? 'completed' : 'skipped'}`);
+		}
+
+		// Start Telegram relay if configured
+		const telegram = new TelegramRelay(getStateDir());
+		if (telegram.loadConfig()) {
+			telegram.start((text, from) => {
+				outputChannel.appendLine(`[telegram] ${from}: ${text}`);
+				chatPanel?.addMessage('user', `📱 [${from} via Telegram]: ${text}`);
+				// Auto-respond
+				engine.sendMessage(text).then(response => {
+					telegram.send(response);
+				}).catch(() => {});
+			});
+			outputChannel.appendLine('Telegram relay started');
+			context.subscriptions.push({ dispose: () => telegram.stop() });
 		}
 
 		// Start engine
@@ -161,10 +235,21 @@ async function restartEngine(): Promise<void> {
 		}
 
 		const llmProvider = config.get<string>('llmProvider', 'anthropic') as 'anthropic' | 'openai' | 'ollama';
-		const llmApiKey = config.get<string>('llmApiKey', '');
 		const llmModel = config.get<string>('llmModel', '');
 		const ollamaUrl = config.get<string>('ollamaUrl', 'http://127.0.0.1:11434');
 		const ollamaModel = config.get<string>('ollamaModel', 'llama3');
+
+		// Try SecretStorage first, fall back to Settings
+		let llmApiKey = await _context.secrets.get('clawsouls.llmApiKey') || '';
+		if (!llmApiKey) {
+			llmApiKey = config.get<string>('llmApiKey', '');
+			// Migrate to SecretStorage if found in Settings
+			if (llmApiKey) {
+				await _context.secrets.store('clawsouls.llmApiKey', llmApiKey);
+				await config.update('llmApiKey', undefined, vscode.ConfigurationTarget.Global);
+				outputChannel.appendLine('API key migrated to SecretStorage');
+			}
+		}
 
 		await engine.init({
 			stateDir: getStateDir(),

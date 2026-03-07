@@ -2,7 +2,7 @@
   "name": "soulclaw-vscode",
   "displayName": "SoulClaw — Soul-Powered AI Agent",
   "description": "Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "clawsouls",
   "icon": "media/icon.png",
   "engines": {
@@ -200,6 +200,26 @@
       {
         "command": "soulclaw.clearContext",
         "title": "SoulClaw: Clear Context"
+      },
+      {
+        "command": "soulclaw.refactorCode",
+        "title": "SoulClaw: Refactor"
+      },
+      {
+        "command": "soulclaw.generateTest",
+        "title": "SoulClaw: Generate Test"
+      },
+      {
+        "command": "soulclaw.generateDocs",
+        "title": "SoulClaw: Generate Docs"
+      },
+      {
+        "command": "soulclaw.codeLensAction",
+        "title": "SoulClaw: CodeLens Action"
+      },
+      {
+        "command": "soulclaw.stopGeneration",
+        "title": "SoulClaw: Stop Generation"
       }
     ],
     "menus": {
@@ -239,6 +259,21 @@
         {
           "command": "soulclaw.addToContext",
           "group": "soulclaw@4",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "soulclaw.refactorCode",
+          "group": "soulclaw@5",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "soulclaw.generateTest",
+          "group": "soulclaw@6",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "soulclaw.generateDocs",
+          "group": "soulclaw@7",
           "when": "editorHasSelection"
         }
       ],
@@ -354,6 +389,22 @@
           "type": "string",
           "default": "llama3",
           "description": "Ollama model name"
+        },
+        "clawsouls.maxConversationMessages": {
+          "type": "number",
+          "default": 40,
+          "description": "Maximum messages before conversation compaction"
+        },
+        "clawsouls.allowedTools": {
+          "type": "array",
+          "default": ["read_file", "write_file", "edit_file", "list_files", "run_command", "search_files"],
+          "description": "Tools the agent is allowed to use. Remove items to restrict.",
+          "items": { "type": "string" }
+        },
+        "clawsouls.codeLensEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Ask/Explain/Fix CodeLens above functions"
         }
       }
     },

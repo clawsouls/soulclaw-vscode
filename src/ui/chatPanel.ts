@@ -31,6 +31,40 @@ export class ChatPanel {
 		this.updateHistoryIndex(wsName);
 
 		// Listen for engine events
+		this.engine.on('toolCall', (data: { name: string; args: any }) => {
+			if (this.panel) {
+				this.panel.webview.postMessage({ type: 'toolCall', name: data.name, args: data.args });
+			}
+		});
+
+		this.engine.on('toolResult', (data: { name: string; success: boolean; output: string }) => {
+			if (this.panel) {
+				this.panel.webview.postMessage({ type: 'toolResult', name: data.name, success: data.success, output: data.output });
+			}
+		});
+
+		this.engine.on('fileChanged', async (filePath: string) => {
+			try {
+				const vscode = require('vscode');
+				const path = require('path');
+				const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(filePath);
+				const doc = await vscode.workspace.openTextDocument(absPath);
+				await vscode.window.showTextDocument(doc, { preview: true, preserveFocus: true });
+			} catch {}
+		});
+
+		this.engine.on('drift', (data: { score: number; signals: string[] }) => {
+			const vsc = require('vscode');
+			vsc.window.showWarningMessage(
+				`⚠️ Persona drift detected (alignment: ${data.score}%): ${data.signals[0] || 'Style mismatch'}`,
+				'Dismiss', 'Create Checkpoint'
+			).then((choice: string) => {
+				if (choice === 'Create Checkpoint') {
+					vsc.commands.executeCommand('clawsouls.createCheckpoint');
+				}
+			});
+		});
+
 		this.engine.on('delta', (text: string) => {
 			if (this.panel) {
 				this.panel.webview.postMessage({ type: 'streamUpdate', text });
@@ -200,6 +234,18 @@ export class ChatPanel {
 				const { clearContextBuffer } = require('../commands/codeActions');
 				clearContextBuffer();
 				break;
+			case 'exportChat':
+				this.exportChat();
+				break;
+			case 'stopGeneration':
+				this.engine.abort();
+				break;
+			case 'applyCode':
+				this.applyCodeToEditor(message.code);
+				break;
+			case 'diffCode':
+				this.showDiffPreview(message.code);
+				break;
 		}
 	}
 	
@@ -240,6 +286,79 @@ export class ChatPanel {
 		}
 	}
 	
+	private async exportChat(): Promise<void> {
+		if (this.messages.length === 0) {
+			vscode.window.showInformationMessage('No messages to export.');
+			return;
+		}
+		const format = await vscode.window.showQuickPick(
+			[{ label: 'Markdown', value: 'md' }, { label: 'JSON', value: 'json' }],
+			{ placeHolder: 'Export format' }
+		);
+		if (!format) return;
+
+		let content: string;
+		const now = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+
+		if (format.value === 'json') {
+			content = JSON.stringify(this.messages, null, 2);
+		} else {
+			content = `# SoulClaw Chat Export\n\n_Exported: ${new Date().toLocaleString()}_\n\n---\n\n`;
+			for (const msg of this.messages) {
+				const time = new Date(msg.timestamp).toLocaleString();
+				const icon = msg.role === 'user' ? '👤 You' : '🔮 SoulClaw';
+				content += `### ${icon} (${time})\n\n${msg.content}\n\n---\n\n`;
+			}
+		}
+
+		const uri = await vscode.window.showSaveDialog({
+			defaultUri: vscode.Uri.file(`soulclaw-chat-${now}.${format.value}`),
+			filters: format.value === 'json' ? { JSON: ['json'] } : { Markdown: ['md'] },
+		});
+		if (uri) {
+			const fs = require('fs');
+			fs.writeFileSync(uri.fsPath, content);
+			vscode.window.showInformationMessage(`Chat exported to ${uri.fsPath}`);
+		}
+	}
+
+	private async applyCodeToEditor(code: string): Promise<void> {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			vscode.window.showWarningMessage('No active editor. Open a file first.');
+			return;
+		}
+		await editor.edit(editBuilder => {
+			if (editor.selection.isEmpty) {
+				editBuilder.insert(editor.selection.active, code);
+			} else {
+				editBuilder.replace(editor.selection, code);
+			}
+		});
+	}
+
+	private async showDiffPreview(code: string): Promise<void> {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			vscode.window.showWarningMessage('No active editor to diff against.');
+			return;
+		}
+
+		const fs = require('fs');
+		const pathMod = require('path');
+		const os = require('os');
+		const tmpDir = pathMod.join(os.tmpdir(), 'soulclaw-diff');
+		fs.mkdirSync(tmpDir, { recursive: true });
+
+		const ext = pathMod.extname(editor.document.fileName) || '.txt';
+		const tmpFile = pathMod.join(tmpDir, `proposed${ext}`);
+		fs.writeFileSync(tmpFile, code);
+
+		const originalUri = editor.document.uri;
+		const proposedUri = vscode.Uri.file(tmpFile);
+		await vscode.commands.executeCommand('vscode.diff', originalUri, proposedUri, 'Current ↔ Proposed');
+	}
+
 	private updateWebviewContent(): void {
 		if (!this.panel) return;
 		
@@ -279,6 +398,7 @@ export class ChatPanel {
 						Engine: ${engineStatus}
 					</div>
 					<div style="display:flex;gap:8px;">
+						<button id="exportBtn" title="Export Chat" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--vscode-foreground);opacity:0.7;padding:2px 6px;">💾 Export</button>
 						<button id="clearBtn" title="Clear Chat" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--vscode-foreground);opacity:0.7;padding:2px 6px;">🗑️ Clear</button>
 						<button id="historyBtn" title="Switch Chat History" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--vscode-foreground);opacity:0.7;padding:2px 6px;">📋 History</button>
 					</div>
@@ -296,10 +416,12 @@ export class ChatPanel {
 						</div>
 						<div id="contextList" style="padding:4px 10px;background:var(--vscode-editorWidget-background);border:1px solid var(--vscode-input-border);border-top:none;border-radius:0 0 4px 4px;font-size:11px;max-height:60px;overflow-y:auto;"></div>
 					</div>
+					<div id="toolLog" style="display:none;max-height:80px;overflow-y:auto;margin-bottom:8px;font-size:11px;"></div>
 					<div class="input-container">
 						<textarea id="messageInput" placeholder="Send a message to your soul-powered agent..."
 								  rows="2" maxlength="4000"></textarea>
 						<button id="sendButton">Send</button>
+						<button id="stopButton" style="display:none;background:var(--vscode-errorForeground);">Stop</button>
 					</div>
 					<div class="drag-drop-area" id="dragDropArea">
 						📁 Drag & drop files here to insert paths
@@ -320,6 +442,9 @@ export class ChatPanel {
 					document.getElementById('historyBtn').addEventListener('click', () => {
 						vscode.postMessage({ type: 'switchHistory' });
 					});
+					document.getElementById('exportBtn')?.addEventListener('click', () => {
+						vscode.postMessage({ type: 'exportChat' });
+					});
 					document.getElementById('clearContextBtn').addEventListener('click', () => {
 						vscode.postMessage({ type: 'clearContext' });
 						document.getElementById('contextBar').style.display = 'none';
@@ -337,7 +462,13 @@ export class ChatPanel {
 						}
 					}
 					
+					const stopButton = document.getElementById('stopButton');
+					const toolLog = document.getElementById('toolLog');
+					
 					sendButton.addEventListener('click', sendMessage);
+					stopButton.addEventListener('click', () => {
+						vscode.postMessage({ type: 'stopGeneration' });
+					});
 					
 					messageInput.addEventListener('keydown', (e) => {
 						if (e.key === 'Enter' && !e.shiftKey) {
@@ -372,7 +503,7 @@ export class ChatPanel {
 						}
 					});
 					
-					// Add copy buttons to all code blocks
+					// Add copy + apply buttons to all code blocks
 					function addCopyButtons(container) {
 						container.querySelectorAll('pre').forEach(pre => {
 							if (pre.querySelector('.copy-btn')) return;
@@ -388,6 +519,32 @@ export class ChatPanel {
 								});
 							};
 							pre.appendChild(btn);
+
+							// Apply button — insert code into active editor
+							const applyBtn = document.createElement('button');
+							applyBtn.className = 'copy-btn';
+							applyBtn.textContent = 'Apply';
+							applyBtn.style.right = '52px';
+							applyBtn.onclick = () => {
+								const code = pre.querySelector('code');
+								const text = code ? code.textContent : pre.textContent;
+								vscode.postMessage({ type: 'applyCode', code: text });
+								applyBtn.textContent = '✓';
+								setTimeout(() => applyBtn.textContent = 'Apply', 1500);
+							};
+							pre.appendChild(applyBtn);
+
+							// Diff button
+							const diffBtn = document.createElement('button');
+							diffBtn.className = 'copy-btn';
+							diffBtn.textContent = 'Diff';
+							diffBtn.style.right = '104px';
+							diffBtn.onclick = () => {
+								const code = pre.querySelector('code');
+								const text = code ? code.textContent : pre.textContent;
+								vscode.postMessage({ type: 'diffCode', code: text });
+							};
+							pre.appendChild(diffBtn);
 						});
 					}
 					// Initial code blocks
@@ -409,7 +566,28 @@ export class ChatPanel {
 							addCopyButtons(el);
 							messagesContainer.scrollTop = messagesContainer.scrollHeight;
 						}
+						if (message.type === 'toolCall') {
+							toolLog.style.display = 'block';
+							stopButton.style.display = 'inline-block';
+							const entry = document.createElement('div');
+							entry.className = 'tool-indicator';
+							entry.innerHTML = '🔧 <strong>' + message.name + '</strong>';
+							if (message.args) {
+								const summary = JSON.stringify(message.args).slice(0, 100);
+								entry.innerHTML += ' <span style="opacity:0.6">' + summary + '</span>';
+							}
+							toolLog.appendChild(entry);
+							toolLog.scrollTop = toolLog.scrollHeight;
+						}
+						if (message.type === 'toolResult') {
+							const entry = document.createElement('div');
+							entry.style.cssText = 'padding:2px 12px;font-size:10px;opacity:0.6;border-left:3px solid ' + (message.success ? 'var(--vscode-charts-green)' : 'var(--vscode-charts-red)');
+							entry.textContent = (message.success ? '✓ ' : '✗ ') + (message.output || '').slice(0, 120);
+							toolLog.appendChild(entry);
+							toolLog.scrollTop = toolLog.scrollHeight;
+						}
 						if (message.type === 'streamUpdate') {
+							stopButton.style.display = 'inline-block';
 							// Show streaming response with live text
 							let streamEl = document.getElementById('streaming');
 							if (!streamEl) {
@@ -435,6 +613,9 @@ export class ChatPanel {
 						if (message.type === 'clearStream') {
 							const streamEl = document.getElementById('streaming');
 							if (streamEl) streamEl.remove();
+							stopButton.style.display = 'none';
+							toolLog.style.display = 'none';
+							toolLog.innerHTML = '';
 						}
 						if (message.type === 'contextUpdate') {
 							const bar = document.getElementById('contextBar');

@@ -132,14 +132,40 @@ export function executeTool(call: ToolCall, workspaceDir: string): ToolResult {
 	}
 }
 
+/** Sensitive file patterns — warn before reading */
+const SENSITIVE_PATTERNS = [
+	/\.env$/i, /\.env\.\w+$/i, /credentials/i, /\.pem$/i, /\.key$/i,
+	/id_rsa/, /id_ed25519/, /\.ssh\/config/, /\.netrc/, /\.npmrc/,
+	/password/i, /secret/i, /token/i,
+];
+
+function isSensitiveFile(filePath: string): boolean {
+	const base = path.basename(filePath);
+	return SENSITIVE_PATTERNS.some(p => p.test(base) || p.test(filePath));
+}
+
 function resolvePath(p: string, workspaceDir: string): string {
 	if (path.isAbsolute(p)) return p;
 	return path.resolve(workspaceDir, p);
 }
 
+/** Check if path is within allowed workspace scope */
+function isWithinScope(filePath: string, workspaceDir: string): boolean {
+	const resolved = path.resolve(filePath);
+	const wsResolved = path.resolve(workspaceDir);
+	// Allow workspace, home dir project paths, and /tmp
+	return resolved.startsWith(wsResolved) ||
+		resolved.startsWith(path.join(process.env.HOME || '', 'projects')) ||
+		resolved.startsWith('/tmp') ||
+		resolved.startsWith(process.env.TMPDIR || '/tmp');
+}
+
 function readFile(filePath: string): ToolResult {
 	if (!fs.existsSync(filePath)) {
 		return { success: false, output: `File not found: ${filePath}` };
+	}
+	if (isSensitiveFile(filePath)) {
+		return { success: false, output: `⚠️ Blocked: "${path.basename(filePath)}" appears to be a sensitive file (credentials/keys). Use read_file only on source code files.` };
 	}
 	const stat = fs.statSync(filePath);
 	if (stat.size > 512 * 1024) {
@@ -150,6 +176,12 @@ function readFile(filePath: string): ToolResult {
 }
 
 function writeFile(filePath: string, content: string): ToolResult {
+	// Scope check — don't write outside workspace
+	const home = process.env.HOME || '';
+	const resolved = path.resolve(filePath);
+	if (resolved.startsWith(path.join(home, '.ssh')) || resolved.startsWith('/etc') || resolved.startsWith('/usr')) {
+		return { success: false, output: `⚠️ Blocked: Cannot write to system directory "${filePath}".` };
+	}
 	fs.mkdirSync(path.dirname(filePath), { recursive: true });
 	fs.writeFileSync(filePath, content);
 	return { success: true, output: `Written ${content.length} bytes to ${filePath}` };

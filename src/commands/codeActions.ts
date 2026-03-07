@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { chatPanel } from '../extension';
 
-export type CodeActionKind = 'ask' | 'explain' | 'fix' | 'context';
+export type CodeActionKind = 'ask' | 'explain' | 'fix' | 'context' | 'refactor' | 'test' | 'docs';
 
 interface CodeSnippet {
 	filePath: string;
@@ -78,9 +78,14 @@ async function sendCodeAction(kind: CodeActionKind): Promise<void> {
 		prompt = `${input}\n\n${formatSnippetBlock(snippet)}`;
 	} else if (kind === 'explain') {
 		prompt = `Explain this code:\n\n${formatSnippetBlock(snippet)}`;
-	} else {
-		// fix
+	} else if (kind === 'fix') {
 		prompt = `Fix this code:\n\n${formatSnippetBlock(snippet)}`;
+	} else if (kind === 'refactor') {
+		prompt = `Refactor this code for better readability and maintainability:\n\n${formatSnippetBlock(snippet)}`;
+	} else if (kind === 'test') {
+		prompt = `Generate unit tests for this code:\n\n${formatSnippetBlock(snippet)}`;
+	} else if (kind === 'docs') {
+		prompt = `Generate documentation (JSDoc/docstring) for this code:\n\n${formatSnippetBlock(snippet)}`;
 	}
 
 	// Prepend any accumulated context
@@ -102,6 +107,9 @@ export function registerCodeActions(context: vscode.ExtensionContext): void {
 		vscode.commands.registerCommand('soulclaw.explainCode', () => sendCodeAction('explain')),
 		vscode.commands.registerCommand('soulclaw.fixCode', () => sendCodeAction('fix')),
 		vscode.commands.registerCommand('soulclaw.addToContext', () => sendCodeAction('context')),
+		vscode.commands.registerCommand('soulclaw.refactorCode', () => sendCodeAction('refactor')),
+		vscode.commands.registerCommand('soulclaw.generateTest', () => sendCodeAction('test')),
+		vscode.commands.registerCommand('soulclaw.generateDocs', () => sendCodeAction('docs')),
 		vscode.commands.registerCommand('soulclaw.clearContext', () => {
 			clearContextBuffer();
 			chatPanel?.notifyContextUpdate([]);

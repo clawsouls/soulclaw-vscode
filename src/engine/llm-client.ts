@@ -44,20 +44,20 @@ export class LLMClient extends EventEmitter {
 		return this.config.model || DEFAULT_MODELS[this.config.provider] || 'claude-sonnet-4-20250514';
 	}
 
-	async chat(messages: LLMMessage[], onDelta?: (text: string) => void, tools?: any[]): Promise<string | { toolCalls: Array<{ id: string; name: string; args: any }> }> {
+	async chat(messages: LLMMessage[], onDelta?: (text: string) => void, tools?: any[], signal?: AbortSignal): Promise<string | { toolCalls: Array<{ id: string; name: string; args: any }> }> {
 		switch (this.config.provider) {
 			case 'anthropic':
-				return this.chatAnthropic(messages, onDelta, tools);
+				return this.chatAnthropic(messages, onDelta, tools, signal);
 			case 'openai':
-				return this.chatOpenAI(messages, onDelta, tools);
+				return this.chatOpenAI(messages, onDelta, tools, signal);
 			case 'ollama':
-				return this.chatOllama(messages, onDelta);
+				return this.chatOllama(messages, onDelta, signal);
 			default:
 				throw new Error(`Unknown provider: ${this.config.provider}`);
 		}
 	}
 
-	private async chatAnthropic(messages: LLMMessage[], onDelta?: (text: string) => void, tools?: any[]): Promise<string | { toolCalls: Array<{ id: string; name: string; args: any }> }> {
+	private async chatAnthropic(messages: LLMMessage[], onDelta?: (text: string) => void, tools?: any[], signal?: AbortSignal): Promise<string | { toolCalls: Array<{ id: string; name: string; args: any }> }> {
 		const systemMsg = messages.find(m => m.role === 'system');
 		const chatMsgs = messages.filter(m => m.role !== 'system');
 
@@ -144,18 +144,31 @@ export class LLMClient extends EventEmitter {
 				});
 			});
 
-			req.on('error', reject);
+			req.on('error', (err) => {
+				if ((err as any).code === 'ABORT_ERR' || signal?.aborted) {
+					resolve(fullText || '⏹️ Stopped.');
+				} else {
+					reject(err);
+				}
+			});
+			if (signal) {
+				signal.addEventListener('abort', () => req.destroy(), { once: true });
+			}
 			req.write(body);
 			req.end();
 		});
 	}
 
-	private async chatOpenAI(messages: LLMMessage[], onDelta?: (text: string) => void, tools?: any[]): Promise<string> {
-		const body = JSON.stringify({
+	private async chatOpenAI(messages: LLMMessage[], onDelta?: (text: string) => void, tools?: any[], signal?: AbortSignal): Promise<string | { toolCalls: Array<{ id: string; name: string; args: any }> }> {
+		const payload: any = {
 			model: this.model,
 			messages: messages.map(m => ({ role: m.role, content: m.content })),
 			stream: true,
-		});
+		};
+		if (tools && tools.length > 0) {
+			payload.tools = tools;
+		}
+		const body = JSON.stringify(payload);
 
 		return new Promise((resolve, reject) => {
 			const req = https.request({
@@ -176,6 +189,7 @@ export class LLMClient extends EventEmitter {
 
 				let fullText = '';
 				let buffer = '';
+				const openaiToolCalls: Array<{ id: string; name: string; args: string }> = [];
 
 				res.on('data', (chunk: Buffer) => {
 					buffer += chunk.toString();
@@ -189,25 +203,62 @@ export class LLMClient extends EventEmitter {
 
 						try {
 							const event = JSON.parse(data);
-							const delta = event.choices?.[0]?.delta?.content;
-							if (delta) {
-								fullText += delta;
+							const choice = event.choices?.[0];
+							const delta = choice?.delta;
+							
+							// Text content
+							if (delta?.content) {
+								fullText += delta.content;
 								onDelta?.(fullText);
+							}
+
+							// Tool calls
+							if (delta?.tool_calls) {
+								for (const tc of delta.tool_calls) {
+									if (tc.index !== undefined) {
+										while (openaiToolCalls.length <= tc.index) {
+											openaiToolCalls.push({ id: '', name: '', args: '' });
+										}
+										if (tc.id) openaiToolCalls[tc.index].id = tc.id;
+										if (tc.function?.name) openaiToolCalls[tc.index].name = tc.function.name;
+										if (tc.function?.arguments) openaiToolCalls[tc.index].args += tc.function.arguments;
+									}
+								}
 							}
 						} catch {}
 					}
 				});
 
-				res.on('end', () => resolve(fullText));
+				res.on('end', () => {
+					if (openaiToolCalls.length > 0 && openaiToolCalls[0].name) {
+						const parsed = openaiToolCalls.map(tc => ({
+							id: tc.id,
+							name: tc.name,
+							args: (() => { try { return JSON.parse(tc.args); } catch { return {}; } })(),
+						}));
+						resolve({ toolCalls: parsed } as any);
+					} else {
+						resolve(fullText);
+					}
+				});
 			});
 
-			req.on('error', reject);
+			req.on('error', (err) => {
+				if ((err as any).code === 'ABORT_ERR' || signal?.aborted) {
+					resolve(fullText || '⏹️ Stopped.');
+				} else {
+					reject(err);
+				}
+			});
+			if (signal) {
+				signal.addEventListener('abort', () => req.destroy(), { once: true });
+			}
 			req.write(body);
 			req.end();
 		});
 	}
 
-	private async chatOllama(messages: LLMMessage[], onDelta?: (text: string) => void): Promise<string> {
+	private async chatOllama(messages: LLMMessage[], onDelta?: (text: string) => void, signal?: AbortSignal): Promise<string> {
 		const baseUrl = this.config.ollamaUrl || 'http://127.0.0.1:11434';
 		const url = new URL('/api/chat', baseUrl);
 
@@ -257,7 +308,16 @@ export class LLMClient extends EventEmitter {
 				res.on('end', () => resolve(fullText));
 			});
 
-			req.on('error', reject);
+			req.on('error', (err) => {
+				if ((err as any).code === 'ABORT_ERR' || signal?.aborted) {
+					resolve(fullText || '⏹️ Stopped.');
+				} else {
+					reject(err);
+				}
+			});
+			if (signal) {
+				signal.addEventListener('abort', () => req.destroy(), { once: true });
+			}
 			req.write(body);
 			req.end();
 		});

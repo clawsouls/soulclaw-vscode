@@ -30,6 +30,18 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		);
 
 		this.detectSwarm();
+
+		// Auto-refresh on swarm directory changes
+		const swarmDir = this.getSwarmDir();
+		try {
+			const watcher = vscode.workspace.createFileSystemWatcher(
+				new vscode.RelativePattern(swarmDir, '**/*')
+			);
+			watcher.onDidChange(() => this.refresh());
+			watcher.onDidCreate(() => this.refresh());
+			watcher.onDidDelete(() => this.refresh());
+			context.subscriptions.push(watcher);
+		} catch {}
 	}
 
 	refresh(): void {

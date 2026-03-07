@@ -31,6 +31,12 @@ export class StatusBarManager {
 			const mapped = state === 'ready' ? 'connected' : state === 'running' ? 'connected' : state;
 			this.onConnectionStateChanged(mapped);
 		});
+
+		// Token count updates
+		this.engine.on('tokenUpdate', (count: number) => {
+			const k = (count / 1000).toFixed(1);
+			this.connectionStatusItem.tooltip = `Connected · ~${k}K tokens used this session`;
+		});
 		
 		// Watch for soul.json changes to update status bar
 		const soulWatcher = vscode.workspace.createFileSystemWatcher('**/soul.json');

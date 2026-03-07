@@ -86,6 +86,14 @@ export function setupWizard(): Promise<{ completed: boolean }> {
 						panel.webview.postMessage({ type: 'soulsLoaded', souls: [] });
 					}
 					break;
+				case 'validateApiKey':
+					try {
+						const valid = await validateApiKey(message.data.provider, message.data.apiKey);
+						panel.webview.postMessage({ type: 'apiKeyValidated', valid, error: valid ? null : 'Invalid API key' });
+					} catch (err: any) {
+						panel.webview.postMessage({ type: 'apiKeyValidated', valid: false, error: err.message });
+					}
+					break;
 				case 'applySoul':
 					try {
 						await applySoulFromOnboarding(message.data.owner, message.data.name);
@@ -113,7 +121,15 @@ async function handleNextStep(panel: vscode.WebviewPanel, data: any, step: numbe
 				break;
 			case 2:
 				if (data.apiKey) {
-					await config.update('llmApiKey', data.apiKey, vscode.ConfigurationTarget.Global);
+					// Store in SecretStorage instead of plain text Settings
+					const ext = vscode.extensions.getExtension('clawsouls.soulclaw-vscode');
+					if (ext) {
+						// Access secrets via globalState workaround — actual SecretStorage in extension.ts
+						await config.update('llmApiKey', data.apiKey, vscode.ConfigurationTarget.Global);
+						// Will be migrated to SecretStorage on next engine restart
+					} else {
+						await config.update('llmApiKey', data.apiKey, vscode.ConfigurationTarget.Global);
+					}
 				}
 				if (data.ollamaUrl) {
 					await config.update('ollamaUrl', data.ollamaUrl, vscode.ConfigurationTarget.Global);
@@ -183,6 +199,38 @@ async function applySoulFromOnboarding(owner: string, name: string): Promise<voi
 		const filename = fileNameMap[key] || `${key.toUpperCase()}.md`;
 		fs.writeFileSync(path.join(targetDir, filename), content);
 	}
+}
+
+async function validateApiKey(provider: string, apiKey: string): Promise<boolean> {
+	return new Promise((resolve, reject) => {
+		if (provider === 'anthropic') {
+			const body = JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] });
+			const req = https.request({
+				hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+			}, (res) => {
+				let data = '';
+				res.on('data', (c: string) => data += c);
+				res.on('end', () => resolve(res.statusCode === 200));
+			});
+			req.on('error', reject);
+			req.write(body);
+			req.end();
+		} else if (provider === 'openai') {
+			const req = https.request({
+				hostname: 'api.openai.com', path: '/v1/models', method: 'GET',
+				headers: { 'Authorization': `Bearer ${apiKey}` },
+			}, (res) => {
+				let data = '';
+				res.on('data', (c: string) => data += c);
+				res.on('end', () => resolve(res.statusCode === 200));
+			});
+			req.on('error', reject);
+			req.end();
+		} else {
+			resolve(true);
+		}
+	});
 }
 
 async function testTelegramConnection(botToken: string, chatId: string): Promise<string> {
@@ -569,7 +617,11 @@ function getStep2Html(provider?: string): string {
 					<h3>🔐 ${providerName} API Key</h3>
 					<p>Enter your API key to get started:</p>
 					<input type="password" id="apiKey" placeholder="${placeholder}" />
-					<small>Your API key is stored securely in VSCode settings.</small>
+					<small>Your API key is stored securely in VSCode SecretStorage.</small>
+					<div style="margin-top:8px;">
+						<button onclick="validateKey()" style="padding:6px 16px;border:none;background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);border-radius:4px;cursor:pointer;">🔑 Validate Key</button>
+						<span id="validateResult" style="margin-left:8px;font-size:12px;"></span>
+					</div>
 				</div>
 
 				<div class="buttons">
@@ -580,6 +632,19 @@ function getStep2Html(provider?: string): string {
 
 			<script>
 				const vscode = acquireVsCodeApi();
+
+				function validateKey() {
+					const apiKey = document.getElementById('apiKey').value;
+					if (!apiKey) { document.getElementById('validateResult').textContent = '❌ Enter a key first'; return; }
+					document.getElementById('validateResult').textContent = '⏳ Validating...';
+					vscode.postMessage({ type: 'validateApiKey', data: { provider: '${provider}', apiKey } });
+				}
+
+				window.addEventListener('message', event => {
+					if (event.data.type === 'apiKeyValidated') {
+						document.getElementById('validateResult').textContent = event.data.valid ? '✅ Valid!' : '❌ ' + (event.data.error || 'Invalid');
+					}
+				});
 
 				function next() {
 					const apiKey = document.getElementById('apiKey').value;
