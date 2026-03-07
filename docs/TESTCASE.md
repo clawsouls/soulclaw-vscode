@@ -89,6 +89,8 @@
 | CP-05 | Diff 버튼 클릭 | 파일 선택 → VSCode diff viewer 열림 |  |
 | CP-06 | Delete 버튼 클릭 | 체크포인트 삭제 |  |
 | CP-07 | 체크포인트 없는 상태 | "No checkpoints" 메시지 |  |
+| CP-08 | **저장 위치** | `~/.openclaw/workspace/.clawsouls/checkpoints/`에 저장 (프로젝트 폴더 아님) |  |
+| CP-09 | **Restore 후 gateway restart** | 복원 후 gateway 자동 재시작, 에이전트가 복원된 soul 사용 |  |
 
 ---
 
@@ -113,6 +115,13 @@
 | SW-15 | Branch 항목 클릭 | branch 전환 |  |
 | SW-16 | **프로젝트 repo 무영향 확인** | `git branch` — agent/* 브랜치 없음 |  |
 | SW-17 | 터미널 명령어 구분자 | `;` 사용 (PowerShell 호환) |  |
+| SW-18 | **Swarm dir 위치** | `~/.openclaw/swarm/`에 git repo 생성 (globalStorage 아님) |  |
+| SW-19 | **Pull 후 workspace sync** | Pull → `~/.openclaw/workspace/`에 메모리 파일 복사됨 |  |
+| SW-20 | **Pull 후 gateway restart** | Pull 완료 5초 후 gateway 재시작 |  |
+| SW-21 | **Merge 후 workspace sync** | Merge → workspace에 메모리 파일 복사 + gateway 재시작 |  |
+| SW-22 | **joinAgent prefix 자동추가** | "brad" 입력 → `agent/brad` 브랜치 생성 |  |
+| SW-23 | **Push/Pull 비agent 브랜치 경고** | main 브랜치에서 Push → "not an agent branch" 경고 |  |
+| SW-24 | **여러 workspace에서 같은 swarm** | 다른 프로젝트 열어도 같은 `~/.openclaw/swarm/` 참조 |  |
 
 ---
 
