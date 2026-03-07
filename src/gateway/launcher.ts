@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { outputChannel } from '../extension';
 
-const OPENCLAW_VERSION = '2026.2.9';
+const SOULCLAW_VERSION = '2026.3.6';
 
 export class GatewayLauncher {
 	private process: ChildProcess | null = null;
@@ -27,11 +27,11 @@ export class GatewayLauncher {
 			return true;
 		}
 
-		// Check Node.js version (OpenClaw requires Node 22+)
+		// Check Node.js version (SoulClaw requires Node 22+)
 		const nodePath = this.findSuitableNode();
 		if (!nodePath) {
 			const choice = await vscode.window.showErrorMessage(
-				'OpenClaw requires Node.js 22+. Please install via nvm: `nvm install 24 && nvm use 24`',
+				'SoulClaw requires Node.js 22+. Please install via nvm: `nvm install 24 && nvm use 24`',
 				'Download Node.js'
 			);
 			if (choice === 'Download Node.js') {
@@ -41,13 +41,13 @@ export class GatewayLauncher {
 		}
 		outputChannel.appendLine(`Using Node: ${nodePath}`);
 
-		// Ensure OpenClaw is installed in extension storage
-		const openclawBin = await this.ensureInstalled(nodePath);
-		if (!openclawBin) {
+		// Ensure SoulClaw is installed in extension storage
+		const soulclawBin = await this.ensureInstalled(nodePath);
+		if (!soulclawBin) {
 			return false;
 		}
 
-		return await this.startGateway(openclawBin, nodePath);
+		return await this.startGateway(soulclawBin, nodePath);
 	}
 
 	/**
@@ -131,45 +131,45 @@ export class GatewayLauncher {
 	}
 
 	/**
-	 * Install OpenClaw into extension's globalStorage (contained, no system pollution).
-	 * Path: ~/.vscode/globalStorage/clawsouls.clawsouls-agent/openclaw/
+	 * Install SoulClaw into extension's globalStorage (contained, no system pollution).
+	 * Path: ~/.vscode/globalStorage/clawsouls.soulclaw-vscode/soulclaw/
 	 */
 	private async ensureInstalled(nodePath: string): Promise<string | null> {
-		const openclawDir = path.join(this.storagePath, 'openclaw');
+		const soulclawDir = path.join(this.storagePath, 'soulclaw');
 		const isWin = process.platform === 'win32';
 		const binPath = isWin
-			? path.join(openclawDir, 'node_modules', '.bin', 'openclaw.cmd')
-			: path.join(openclawDir, 'node_modules', '.bin', 'openclaw');
+			? path.join(soulclawDir, 'node_modules', '.bin', 'soulclaw.cmd')
+			: path.join(soulclawDir, 'node_modules', '.bin', 'soulclaw');
 
 		// Check if already installed with correct version
 		if (fs.existsSync(binPath)) {
 			try {
 				const ver = execSync(`"${binPath}" --version`, { encoding: 'utf-8', timeout: 5000 }).trim();
-				if (ver.includes(OPENCLAW_VERSION)) {
-					outputChannel.appendLine(`OpenClaw ${OPENCLAW_VERSION} ready (contained)`);
+				if (ver.includes(SOULCLAW_VERSION)) {
+					outputChannel.appendLine(`SoulClaw ${SOULCLAW_VERSION} ready (contained)`);
 					return binPath;
 				}
-				outputChannel.appendLine(`OpenClaw version mismatch (${ver}), updating...`);
+				outputChannel.appendLine(`SoulClaw version mismatch (${ver}), updating...`);
 			} catch {
-				outputChannel.appendLine('OpenClaw binary check failed, reinstalling...');
+				outputChannel.appendLine('SoulClaw binary check failed, reinstalling...');
 			}
 		}
 
-		// Install OpenClaw into contained directory
+		// Install SoulClaw into contained directory
 		return await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
 			title: 'SoulClaw',
 			cancellable: false
 		}, async (progress) => {
-			progress.report({ message: 'Installing OpenClaw runtime...' });
+			progress.report({ message: 'Installing SoulClaw runtime...' });
 
 			try {
 				// Create directory
-				fs.mkdirSync(openclawDir, { recursive: true });
+				fs.mkdirSync(soulclawDir, { recursive: true });
 
 				// Create minimal package.json
-				const pkg = { name: 'clawsouls-agent-runtime', version: '1.0.0', private: true };
-				fs.writeFileSync(path.join(openclawDir, 'package.json'), JSON.stringify(pkg));
+				const pkg = { name: 'soulclaw-runtime', version: '1.0.0', private: true };
+				fs.writeFileSync(path.join(soulclawDir, 'package.json'), JSON.stringify(pkg));
 
 				// Use npm from the same Node installation
 				const nodeDir = path.dirname(nodePath);
@@ -179,14 +179,14 @@ export class GatewayLauncher {
 				const npmFallback = isWin ? 'npm.cmd' : 'npm';
 				const npm = fs.existsSync(npmCmd) ? `"${npmCmd}"` : npmFallback;
 
-				outputChannel.appendLine(`Installing openclaw@${OPENCLAW_VERSION} into ${openclawDir}...`);
+				outputChannel.appendLine(`Installing soulclaw@${SOULCLAW_VERSION} into ${soulclawDir}...`);
 				outputChannel.appendLine(`Using npm: ${npm}`);
 
-				// Install OpenClaw
+				// Install SoulClaw
 				execSync(
-					`${npm} install openclaw@${OPENCLAW_VERSION} --no-save --legacy-peer-deps`,
+					`${npm} install soulclaw@${SOULCLAW_VERSION} --no-save --legacy-peer-deps`,
 					{
-						cwd: openclawDir,
+						cwd: soulclawDir,
 						encoding: 'utf-8',
 						timeout: 120000,
 						env: { ...process.env },
@@ -195,34 +195,34 @@ export class GatewayLauncher {
 				);
 
 				if (fs.existsSync(binPath)) {
-					outputChannel.appendLine(`OpenClaw ${OPENCLAW_VERSION} installed successfully`);
-					progress.report({ message: 'OpenClaw ready!' });
+					outputChannel.appendLine(`SoulClaw ${SOULCLAW_VERSION} installed successfully`);
+					progress.report({ message: 'SoulClaw ready!' });
 					return binPath;
 				} else {
-					outputChannel.appendLine('OpenClaw binary not found after install');
+					outputChannel.appendLine('SoulClaw binary not found after install');
 					return null;
 				}
 			} catch (err: any) {
-				outputChannel.appendLine(`OpenClaw install failed: ${err.message}`);
+				outputChannel.appendLine(`SoulClaw install failed: ${err.message}`);
 				vscode.window.showErrorMessage(
-					`Failed to install OpenClaw runtime. Check OUTPUT panel for details.`
+					`Failed to install SoulClaw runtime. Check OUTPUT panel for details.`
 				);
 				return null;
 			}
 		});
 	}
 
-	private async startGateway(openclawBin: string, nodePath: string): Promise<boolean> {
+	private async startGateway(soulclawBin: string, nodePath: string): Promise<boolean> {
 		return new Promise((resolve) => {
 			outputChannel.appendLine(`Starting Gateway on port ${this.port}...`);
 
-			// Always use the specific Node binary to run OpenClaw
+			// Always use the specific Node binary to run SoulClaw
 			// This avoids .cmd files picking up the wrong system Node
-			const openclawDir = path.join(this.storagePath, 'openclaw');
+			const soulclawDir = path.join(this.storagePath, 'soulclaw');
 			const candidates = [
-				path.join(openclawDir, 'node_modules', 'openclaw', 'openclaw.mjs'),
-				path.join(openclawDir, 'node_modules', 'openclaw', 'dist', 'cli.mjs'),
-				path.join(openclawDir, 'node_modules', 'openclaw', 'dist', 'index.mjs'),
+				path.join(soulclawDir, 'node_modules', 'soulclaw', 'openclaw.mjs'),
+				path.join(soulclawDir, 'node_modules', 'soulclaw', 'dist', 'cli.mjs'),
+				path.join(soulclawDir, 'node_modules', 'soulclaw', 'dist', 'index.mjs'),
 			];
 
 			let jsEntry = '';
@@ -236,11 +236,11 @@ export class GatewayLauncher {
 			// Fallback: read package.json bin field
 			if (!jsEntry) {
 				try {
-					const pkgPath = path.join(openclawDir, 'node_modules', 'openclaw', 'package.json');
+					const pkgPath = path.join(soulclawDir, 'node_modules', 'soulclaw', 'package.json');
 					const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-					const binEntry = typeof pkg.bin === 'string' ? pkg.bin : (pkg.bin?.openclaw || '');
+					const binEntry = typeof pkg.bin === 'string' ? pkg.bin : (pkg.bin?.soulclaw || '');
 					if (binEntry) {
-						jsEntry = path.join(openclawDir, 'node_modules', 'openclaw', binEntry);
+						jsEntry = path.join(soulclawDir, 'node_modules', 'soulclaw', binEntry);
 					}
 				} catch {}
 			}
@@ -255,15 +255,15 @@ export class GatewayLauncher {
 			const baseArgs = ['gateway', '--port', String(this.port), '--allow-unconfigured', '--dev', '--token', token];
 			const args = jsEntry
 				? [jsEntry, ...baseArgs]
-				: [openclawBin, ...baseArgs];
+				: [soulclawBin, ...baseArgs];
 
 			outputChannel.appendLine(`Exec: ${cmd} ${args.join(' ')}`);
 
-			// Contained architecture: redirect OpenClaw state dir to globalStorage
+			// Contained architecture: redirect SoulClaw state dir to globalStorage
 			const config = vscode.workspace.getConfiguration('clawsouls');
 			const llmProvider = config.get<string>('llmProvider', 'anthropic');
 			const llmApiKey = config.get<string>('llmApiKey', '');
-			const stateDir = path.join(this.storagePath, 'openclaw-state');
+			const stateDir = path.join(this.storagePath, 'soulclaw-state');
 			const envVars: Record<string, string> = {
 				...process.env as Record<string, string>,
 				NO_COLOR: '1',
@@ -284,7 +284,7 @@ export class GatewayLauncher {
 				fs.mkdirSync(stateDir, { recursive: true });
 			}
 			// Write auth-profiles.json to BOTH contained state dir AND default ~/.openclaw/
-			// OpenClaw v2026.2.9 may ignore OPENCLAW_STATE_DIR in gateway mode
+			// SoulClaw: dual-write for OPENCLAW_STATE_DIR in gateway mode
 			if (llmApiKey) {
 				const homeDir = process.env.HOME || process.env.USERPROFILE || '';
 				const authDirs = [
@@ -318,7 +318,7 @@ export class GatewayLauncher {
 				}
 			}
 
-			// Write openclaw.json config (always rewrite to pick up settings changes)
+			// Write soulclaw config config (always rewrite to pick up settings changes)
 			const configPath = path.join(stateDir, 'openclaw.json');
 			{
 				const provider = llmProvider === 'openai' ? 'openai' : 'anthropic';
@@ -333,14 +333,14 @@ export class GatewayLauncher {
 				const primaryModel = llmProvider === 'ollama' 
 					? `ollama/${ollamaModel}` 
 					: model;
-				const openclawConfig: any = {
+				const soulclawConfig: any = {
 					meta: {
-						lastTouchedVersion: OPENCLAW_VERSION,
+						lastTouchedVersion: SOULCLAW_VERSION,
 						lastTouchedAt: new Date().toISOString()
 					},
 					wizard: {
 						lastRunAt: new Date().toISOString(),
-						lastRunVersion: OPENCLAW_VERSION,
+						lastRunVersion: SOULCLAW_VERSION,
 						lastRunCommand: 'onboard',
 						lastRunMode: 'local'
 					},
@@ -364,8 +364,8 @@ export class GatewayLauncher {
 				};
 				
 				if (llmProvider === 'ollama') {
-					openclawConfig.agents.defaults.model.primary = `ollama/${ollamaModel}`;
-					openclawConfig.models = {
+					soulclawConfig.agents.defaults.model.primary = `ollama/${ollamaModel}`;
+					soulclawConfig.models = {
 						providers: {
 							ollama: {
 								baseUrl: `${ollamaUrl}/v1`,
@@ -377,8 +377,8 @@ export class GatewayLauncher {
 					};
 				}
 				
-				fs.writeFileSync(configPath, JSON.stringify(openclawConfig, null, 2));
-				outputChannel.appendLine(`Config written: ${configPath} (model: ${openclawConfig.agents.defaults.model.primary})`);
+				fs.writeFileSync(configPath, JSON.stringify(soulclawConfig, null, 2));
+				outputChannel.appendLine(`Config written: ${configPath} (model: ${soulclawConfig.agents.defaults.model.primary})`);
 			}
 
 			this.process = spawn(cmd, args, {
@@ -404,7 +404,7 @@ export class GatewayLauncher {
 			this.process.stderr?.on('data', (data: Buffer) => {
 				const line = data.toString().trim();
 				outputChannel.appendLine(`[gateway:err] ${line}`);
-				// OpenClaw logs to stderr — detect ready state here too
+				// SoulClaw logs to stderr — detect ready state here too
 				if (!started && (line.includes('listening') || line.includes('ready') || line.includes('started') || line.includes('Gateway') && line.includes('ws://'))) {
 					started = true;
 					resolve(true);
