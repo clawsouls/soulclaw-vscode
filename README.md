@@ -1,4 +1,4 @@
-# ClawSouls Agent — Soul-Powered AI Development
+# SoulClaw — Soul-Powered AI Agent
 
 Zero-setup AI agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools — powered by [OpenClaw](https://github.com/openclaw/openclaw).
 
@@ -144,9 +144,9 @@ Everything is contained — uninstalling cleans up completely.
 
 | OS | Extension Storage | OpenClaw Config |
 |----|-------------------|-----------------|
-| **Windows** | `%APPDATA%\Code\User\globalStorage\clawsouls.clawsouls-agent\` | `%USERPROFILE%\.openclaw\` |
-| **macOS** | `~/Library/Application Support/Code/User/globalStorage/clawsouls.clawsouls-agent/` | `~/.openclaw/` |
-| **Linux** | `~/.config/Code/User/globalStorage/clawsouls.clawsouls-agent/` | `~/.openclaw/` |
+| **Windows** | `%APPDATA%\Code\User\globalStorage\clawsouls.soulclaw-vscode\` | `%USERPROFILE%\.openclaw\` |
+| **macOS** | `~/Library/Application Support/Code/User/globalStorage/clawsouls.soulclaw-vscode/` | `~/.openclaw/` |
+| **Linux** | `~/.config/Code/User/globalStorage/clawsouls.soulclaw-vscode/` | `~/.openclaw/` |
 
 ## Disclaimer
 

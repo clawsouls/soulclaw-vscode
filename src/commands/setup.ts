@@ -131,7 +131,7 @@ async function handleNextStep(panel: vscode.WebviewPanel, data: any, step: numbe
 
 async function finishSetup(panel: vscode.WebviewPanel, data: any): Promise<void> {
 	// Show completion message
-	vscode.window.showInformationMessage('ClawSouls Agent setup completed! 🎉');
+	vscode.window.showInformationMessage('SoulClaw setup completed! 🎉');
 
 	// Auto-open chat if requested
 	if (data.openChat) {
@@ -195,7 +195,7 @@ async function createCustomSoul(name: string): Promise<void> {
 	const soulConfig = {
 		name: name || 'Custom Soul',
 		version: '1.0.0',
-		description: 'A custom soul created with ClawSouls Agent',
+		description: 'A custom soul created with SoulClaw',
 		created: new Date().toISOString()
 	};
 
@@ -300,7 +300,7 @@ function getStep1Html(): string {
 		<body>
 			<div class="container">
 				<div class="step-header">
-					<h1>🔮 Welcome to ClawSouls Agent</h1>
+					<h1>🔮 Welcome to SoulClaw</h1>
 					<p>Step 1 of 5: Choose your LLM provider</p>
 				</div>
 				
@@ -837,7 +837,7 @@ function getStep4Html(): string {
 			<div class="container">
 				<div class="success-icon">🎉</div>
 				<h1>Setup Complete!</h1>
-				<p>ClawSouls Agent is now ready to help you with soul-powered AI development.</p>
+				<p>SoulClaw is now ready to help you with soul-powered AI development.</p>
 				
 				<div class="checkbox">
 					<input type="checkbox" id="openChat" checked />

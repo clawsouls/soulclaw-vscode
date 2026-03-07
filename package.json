@@ -1,8 +1,8 @@
 {
-  "name": "clawsouls-agent",
-  "displayName": "ClawSouls Agent — Soul-Powered AI Development",
+  "name": "soulclaw-vscode",
+  "displayName": "SoulClaw — Soul-Powered AI Agent",
   "description": "Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "clawsouls",
   "icon": "media/icon.png",
   "engines": {
@@ -42,7 +42,7 @@
       "activitybar": [
         {
           "id": "clawsouls-agent",
-          "title": "ClawSouls Agent",
+          "title": "SoulClaw",
           "icon": "media/soul-icon.svg"
         }
       ]

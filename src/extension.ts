@@ -19,10 +19,10 @@ export let outputChannel: vscode.OutputChannel;
 export async function activate(context: vscode.ExtensionContext) {
 	_context = context;
 	// Create output channel (shows in OUTPUT panel Tasks dropdown)
-	outputChannel = vscode.window.createOutputChannel('ClawSouls Agent');
+	outputChannel = vscode.window.createOutputChannel('SoulClaw');
 	context.subscriptions.push(outputChannel);
-	outputChannel.appendLine('ClawSouls Agent v0.1.0 activated');
-	console.log('ClawSouls Agent activated');
+	outputChannel.appendLine('SoulClaw v0.1.0 activated');
+	console.log('SoulClaw activated');
 
 	// Register ALL commands first — before anything that might throw
 	context.subscriptions.push(
@@ -141,7 +141,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		outputChannel.appendLine('Fully initialized');
 	} catch (err) {
 		outputChannel.appendLine(`Activation error: ${err}`);
-		console.error('ClawSouls Agent activation error:', err);
+		console.error('SoulClaw activation error:', err);
 	}
 }
 
@@ -183,7 +183,7 @@ async function restartGateway(): Promise<void> {
 }
 
 export function deactivate() {
-	console.log('ClawSouls Agent deactivated');
+	console.log('SoulClaw deactivated');
 	
 	if (gatewayLauncher) {
 		gatewayLauncher.stop();

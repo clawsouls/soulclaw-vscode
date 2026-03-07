@@ -146,7 +146,7 @@ export class GatewayConnection {
 			maxProtocol: 3,
 			client: {
 				id: 'gateway-client',
-				displayName: 'ClawSouls Agent (VSCode)',
+				displayName: 'SoulClaw (VSCode)',
 				version: '0.1.0',
 				platform: process.platform,
 				mode: 'ui'

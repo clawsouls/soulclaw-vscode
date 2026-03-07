@@ -158,7 +158,7 @@ export class GatewayLauncher {
 		// Install OpenClaw into contained directory
 		return await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
-			title: 'ClawSouls Agent',
+			title: 'SoulClaw',
 			cancellable: false
 		}, async (progress) => {
 			progress.report({ message: 'Installing OpenClaw runtime...' });
