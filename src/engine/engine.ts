@@ -50,6 +50,11 @@ export class SoulClawEngine extends EventEmitter {
 			throw new Error(`Engine not ready (state: ${this._state})`);
 		}
 
+		// Check API key before calling
+		if (this.config.llmProvider !== 'ollama' && !this.config.llmApiKey) {
+			throw new Error(`No API key configured. Run "SoulClaw: Setup" (Cmd+Shift+P) to set your ${this.config.llmProvider} API key.`);
+		}
+
 		this.setState('running');
 
 		try {

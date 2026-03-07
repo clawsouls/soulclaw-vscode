@@ -388,7 +388,7 @@ export class ChatPanel {
 							messagesContainer.scrollTop = messagesContainer.scrollHeight;
 						}
 						if (message.type === 'streamUpdate') {
-							// Show streaming response
+							// Show streaming response with live text
 							let streamEl = document.getElementById('streaming');
 							if (!streamEl) {
 								streamEl = document.createElement('div');
@@ -398,7 +398,16 @@ export class ChatPanel {
 								messagesContainer.appendChild(streamEl);
 							}
 							const contentEl = document.getElementById('stream-content');
-							if (contentEl) contentEl.textContent = message.text;
+							if (contentEl) {
+								// Simple markdown: code blocks, bold, inline code
+								let html = message.text
+									.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+									.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, '<pre><code>$1</code></pre>')
+									.replace(/\`([^\`]+)\`/g, '<code>$1</code>')
+									.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
+									.replace(/\\n/g, '<br>');
+								contentEl.innerHTML = html;
+							}
 							messagesContainer.scrollTop = messagesContainer.scrollHeight;
 						}
 						if (message.type === 'clearStream') {
