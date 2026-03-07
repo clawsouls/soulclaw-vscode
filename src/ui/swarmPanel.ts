@@ -17,6 +17,8 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 
 	private initialized = false;
 	private branches: SwarmBranch[] = [];
+	private hasConflicts = false;
+	private conflictedFiles: string[] = [];
 
 	constructor(private context: vscode.ExtensionContext) {
 		context.subscriptions.push(
@@ -30,6 +32,21 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		);
 
 		this.detectSwarm();
+
+		// Heartbeat auto-sync: pull every 5 minutes if initialized
+		const heartbeatInterval = setInterval(() => {
+			if (!this.initialized) return;
+			const swarmDir = this.getSwarmDir();
+			try {
+				// Only if remote is configured
+				const remotes = execSync('git remote', { cwd: swarmDir, encoding: 'utf8' }).trim();
+				if (remotes) {
+					execSync('git pull --rebase --quiet', { cwd: swarmDir, encoding: 'utf8', timeout: 15000 });
+					this.refresh();
+				}
+			} catch {}
+		}, 5 * 60 * 1000);
+		context.subscriptions.push({ dispose: () => clearInterval(heartbeatInterval) });
 
 		// Auto-refresh on swarm directory changes
 		const swarmDir = this.getSwarmDir();
@@ -70,6 +87,14 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		items.push(new SwarmActionNode('⬇ Pull', 'clawsouls.pullLatest', 'cloud-download'));
 		items.push(new SwarmActionNode('🔀 Merge', 'clawsouls.mergeBranches', 'git-merge'));
 		items.push(new SwarmActionNode('🔐 Encryption Keys', 'clawsouls.swarmKeys', 'key'));
+
+		// Conflicts
+		if (this.hasConflicts) {
+			items.push(new SwarmActionNode(`⚠️ ${this.conflictedFiles.length} Conflict(s)`, 'clawsouls.mergeBranches', 'warning'));
+			for (const f of this.conflictedFiles) {
+				items.push(new SwarmActionNode(`  ├ ${f}`, 'clawsouls.mergeBranches', 'diff'));
+			}
+		}
 
 		// Branches
 		for (const br of this.branches) {
@@ -112,6 +137,24 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 				}));
 		} catch {
 			this.branches = [];
+		}
+
+		// Check for merge conflicts
+		try {
+			const status = execSync('git status --porcelain', { cwd: memDir, encoding: 'utf8' });
+			const conflicted = status.split('\n')
+				.filter(l => l.startsWith('UU') || l.startsWith('AA') || l.startsWith('DD'))
+				.map(l => l.slice(3).trim());
+			if (conflicted.length > 0) {
+				this.hasConflicts = true;
+				this.conflictedFiles = conflicted;
+			} else {
+				this.hasConflicts = false;
+				this.conflictedFiles = [];
+			}
+		} catch {
+			this.hasConflicts = false;
+			this.conflictedFiles = [];
 		}
 	}
 

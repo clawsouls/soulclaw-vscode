@@ -59,7 +59,10 @@ export class SoulExplorerProvider implements vscode.TreeDataProvider<TreeNode> {
 			vscode.commands.registerCommand('clawsouls.soulExplorer.toggleView', () => this.toggleView()),
 			vscode.commands.registerCommand('clawsouls.soulExplorer.apply', (node: RemoteSoulNode) => this.applySoul(node)),
 			vscode.commands.registerCommand('clawsouls.soulExplorer.preview', (node: RemoteSoulNode) => this.previewSoul(node)),
-			vscode.commands.registerCommand('clawsouls.refresh', () => this.refresh())
+			vscode.commands.registerCommand('clawsouls.refresh', () => this.refresh()),
+			vscode.commands.registerCommand('clawsouls.soulExplorer.publish', () => this.publishSoul()),
+			vscode.commands.registerCommand('clawsouls.soulExplorer.diff', (node: RemoteSoulNode) => this.diffSoul(node)),
+			vscode.commands.registerCommand('clawsouls.soulExplorer.bumpVersion', () => this.bumpVersion())
 		);
 
 		// Load remote souls on init
@@ -321,6 +324,88 @@ ${scan}
 			}
 		} catch (err: any) {
 			vscode.window.showErrorMessage(`Failed to apply soul: ${err.message}`);
+		}
+	}
+
+	private async publishSoul(): Promise<void> {
+		const { getWorkspaceDir } = require('../paths');
+		const wsDir = getWorkspaceDir();
+		const soulJsonPath = path.join(wsDir, 'soul.json');
+		
+		if (!fs.existsSync(soulJsonPath)) {
+			vscode.window.showWarningMessage('No soul.json found. Create a soul first.');
+			return;
+		}
+
+		const terminal = vscode.window.createTerminal({ name: 'Soul Publish', cwd: wsDir });
+		terminal.show();
+		terminal.sendText('npx clawsouls publish');
+	}
+
+	private async diffSoul(node: RemoteSoulNode): Promise<void> {
+		const soul = node.soul;
+		try {
+			const detail = await apiGet(`/souls/${soul.owner}/${soul.name}?files=true`);
+			const { getWorkspaceDir } = require('../paths');
+			const localSoulPath = path.join(getWorkspaceDir(), 'SOUL.md');
+			
+			if (!fs.existsSync(localSoulPath)) {
+				vscode.window.showWarningMessage('No local SOUL.md to compare.');
+				return;
+			}
+
+			// Write remote content to temp file
+			const os = require('os');
+			const tmpDir = path.join(os.tmpdir(), 'soulclaw-diff');
+			fs.mkdirSync(tmpDir, { recursive: true });
+			const remoteSoulPath = path.join(tmpDir, 'SOUL.md.remote');
+			const remoteContent = detail.fileContents?.['0'] || detail.description || '(no content)';
+			fs.writeFileSync(remoteSoulPath, remoteContent);
+
+			await vscode.commands.executeCommand('vscode.diff',
+				vscode.Uri.file(localSoulPath),
+				vscode.Uri.file(remoteSoulPath),
+				`SOUL.md: Local ↔ ${soul.fullName}`
+			);
+		} catch (err: any) {
+			vscode.window.showErrorMessage(`Diff failed: ${err.message}`);
+		}
+	}
+
+	private async bumpVersion(): Promise<void> {
+		const { getWorkspaceDir } = require('../paths');
+		const soulJsonPath = path.join(getWorkspaceDir(), 'soul.json');
+		
+		if (!fs.existsSync(soulJsonPath)) {
+			vscode.window.showWarningMessage('No soul.json found.');
+			return;
+		}
+
+		try {
+			const content = JSON.parse(fs.readFileSync(soulJsonPath, 'utf-8'));
+			const currentVersion = content.version || '0.0.0';
+			const parts = currentVersion.split('.').map(Number);
+			
+			const bump = await vscode.window.showQuickPick(
+				[
+					{ label: `Patch (${parts[0]}.${parts[1]}.${parts[2] + 1})`, value: 'patch' },
+					{ label: `Minor (${parts[0]}.${parts[1] + 1}.0)`, value: 'minor' },
+					{ label: `Major (${parts[0] + 1}.0.0)`, value: 'major' },
+				],
+				{ placeHolder: `Current: ${currentVersion}` }
+			);
+			if (!bump) return;
+
+			if (bump.value === 'patch') parts[2]++;
+			else if (bump.value === 'minor') { parts[1]++; parts[2] = 0; }
+			else { parts[0]++; parts[1] = 0; parts[2] = 0; }
+
+			content.version = parts.join('.');
+			fs.writeFileSync(soulJsonPath, JSON.stringify(content, null, 2));
+			vscode.window.showInformationMessage(`Version bumped to ${content.version}`);
+			this.refresh();
+		} catch (err: any) {
+			vscode.window.showErrorMessage(`Version bump failed: ${err.message}`);
 		}
 	}
 

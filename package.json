@@ -214,6 +214,10 @@
         "title": "SoulClaw: Generate Docs"
       },
       {
+        "command": "soulclaw.generateImpl",
+        "title": "SoulClaw: Generate Implementation"
+      },
+      {
         "command": "soulclaw.codeLensAction",
         "title": "SoulClaw: CodeLens Action"
       },
@@ -274,6 +278,11 @@
         {
           "command": "soulclaw.generateDocs",
           "group": "soulclaw@7",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "soulclaw.generateImpl",
+          "group": "soulclaw@8",
           "when": "editorHasSelection"
         }
       ],

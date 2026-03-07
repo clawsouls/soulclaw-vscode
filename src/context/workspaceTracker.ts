@@ -22,6 +22,9 @@ export class WorkspaceTracker {
 		this.updateContext();
 	}
 	
+	private _onContextChanged = new vscode.EventEmitter<WorkspaceContext>();
+	readonly onContextChanged = this._onContextChanged.event;
+
 	private setupEventListeners(): void {
 		// Listen for active editor changes
 		vscode.window.onDidChangeActiveTextEditor(this.onActiveEditorChanged.bind(this));
@@ -34,6 +37,12 @@ export class WorkspaceTracker {
 		
 		// Listen for configuration changes
 		vscode.workspace.onDidChangeConfiguration(this.onConfigurationChanged.bind(this));
+
+		// Listen for file create/delete/rename
+		const fileWatcher = vscode.workspace.createFileSystemWatcher('**/*');
+		fileWatcher.onDidCreate(() => { this.updateOpenFiles(); this._onContextChanged.fire(this.context); });
+		fileWatcher.onDidDelete(() => { this.updateOpenFiles(); this._onContextChanged.fire(this.context); });
+		this.extensionContext.subscriptions.push(fileWatcher, this._onContextChanged);
 	}
 	
 	private onActiveEditorChanged(editor?: vscode.TextEditor): void {

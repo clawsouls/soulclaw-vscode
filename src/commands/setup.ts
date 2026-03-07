@@ -121,15 +121,11 @@ async function handleNextStep(panel: vscode.WebviewPanel, data: any, step: numbe
 				break;
 			case 2:
 				if (data.apiKey) {
-					// Store in SecretStorage instead of plain text Settings
-					const ext = vscode.extensions.getExtension('clawsouls.soulclaw-vscode');
-					if (ext) {
-						// Access secrets via globalState workaround — actual SecretStorage in extension.ts
-						await config.update('llmApiKey', data.apiKey, vscode.ConfigurationTarget.Global);
-						// Will be migrated to SecretStorage on next engine restart
-					} else {
-						await config.update('llmApiKey', data.apiKey, vscode.ConfigurationTarget.Global);
-					}
+					await config.update('llmApiKey', data.apiKey, vscode.ConfigurationTarget.Global);
+					// Will be migrated to SecretStorage on next engine restart
+				}
+				if (data.model) {
+					await config.update('llmModel', data.model, vscode.ConfigurationTarget.Global);
 				}
 				if (data.ollamaUrl) {
 					await config.update('ollamaUrl', data.ollamaUrl, vscode.ConfigurationTarget.Global);
@@ -624,6 +620,26 @@ function getStep2Html(provider?: string): string {
 					</div>
 				</div>
 
+				<div class="auth-option">
+					<h3>🤖 Model</h3>
+					<select id="modelSelect" style="width:100%;padding:8px;border:1px solid var(--vscode-input-border);background:var(--vscode-input-background);color:var(--vscode-input-foreground);border-radius:4px;">
+						${provider === 'openai' ? `
+							<option value="">Default (gpt-4o)</option>
+							<option value="gpt-4o">GPT-4o</option>
+							<option value="gpt-4o-mini">GPT-4o Mini</option>
+							<option value="gpt-4-turbo">GPT-4 Turbo</option>
+							<option value="o1">o1</option>
+							<option value="o1-mini">o1-mini</option>
+						` : `
+							<option value="">Default (claude-sonnet-4-20250514)</option>
+							<option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+							<option value="claude-opus-4-20250514">Claude Opus 4</option>
+							<option value="claude-haiku-35-20241022">Claude 3.5 Haiku</option>
+						`}
+					</select>
+					<small>Leave as default unless you have a preference.</small>
+				</div>
+
 				<div class="buttons">
 					<button onclick="back()">← Back</button>
 					<button onclick="next()">Next →</button>
@@ -648,9 +664,10 @@ function getStep2Html(provider?: string): string {
 
 				function next() {
 					const apiKey = document.getElementById('apiKey').value;
+					const model = document.getElementById('modelSelect').value;
 					vscode.postMessage({
 						type: 'next',
-						data: { apiKey: apiKey }
+						data: { apiKey, model }
 					});
 				}
 

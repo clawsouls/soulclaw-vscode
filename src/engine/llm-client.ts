@@ -61,13 +61,15 @@ export class LLMClient extends EventEmitter {
 		const systemMsg = messages.find(m => m.role === 'system');
 		const chatMsgs = messages.filter(m => m.role !== 'system');
 
+		// Use prompt caching for system prompt (Anthropic beta)
+		const systemContent = systemMsg?.content || '';
 		const payload: any = {
 			model: this.model,
 			max_tokens: 8192,
-			system: systemMsg?.content || '',
+			system: [{ type: 'text', text: systemContent, cache_control: { type: 'ephemeral' } }],
 			messages: chatMsgs.map(m => {
 				if (typeof m.content === 'string') return { role: m.role, content: m.content };
-				return { role: m.role, content: m.content }; // support array content blocks
+				return { role: m.role, content: m.content };
 			}),
 			stream: true,
 		};
@@ -85,6 +87,7 @@ export class LLMClient extends EventEmitter {
 					'Content-Type': 'application/json',
 					'x-api-key': this.config.apiKey || '',
 					'anthropic-version': '2023-06-01',
+					'anthropic-beta': 'prompt-caching-2024-07-31',
 				},
 			}, (res) => {
 				if (res.statusCode && res.statusCode >= 400) {
@@ -258,15 +261,23 @@ export class LLMClient extends EventEmitter {
 		});
 	}
 
-	private async chatOllama(messages: LLMMessage[], onDelta?: (text: string) => void, signal?: AbortSignal): Promise<string> {
+	private async chatOllama(messages: LLMMessage[], onDelta?: (text: string) => void, signal?: AbortSignal, tools?: any[]): Promise<string | { toolCalls: Array<{ id: string; name: string; args: any }> }> {
 		const baseUrl = this.config.ollamaUrl || 'http://127.0.0.1:11434';
 		const url = new URL('/api/chat', baseUrl);
 
-		const body = JSON.stringify({
+		const payload: any = {
 			model: this.model,
 			messages: messages.map(m => ({ role: m.role, content: m.content })),
 			stream: true,
-		});
+		};
+		// Ollama tool calling (supported by llama3.1+, mistral, etc.)
+		if (tools && tools.length > 0) {
+			payload.tools = tools.map((t: any) => ({
+				type: 'function',
+				function: { name: t.name, description: t.description, parameters: t.input_schema || t.parameters },
+			}));
+		}
+		const body = JSON.stringify(payload);
 
 		const transport = url.protocol === 'https:' ? https : http;
 
@@ -287,6 +298,7 @@ export class LLMClient extends EventEmitter {
 
 				let fullText = '';
 				let buffer = '';
+				const ollamaToolCalls: Array<{ id: string; name: string; args: any }> = [];
 
 				res.on('data', (chunk: Buffer) => {
 					buffer += chunk.toString();
@@ -301,11 +313,27 @@ export class LLMClient extends EventEmitter {
 								fullText += event.message.content;
 								onDelta?.(fullText);
 							}
+							// Ollama tool calls
+							if (event.message?.tool_calls) {
+								for (const tc of event.message.tool_calls) {
+									ollamaToolCalls.push({
+										id: `ollama_${Date.now()}_${ollamaToolCalls.length}`,
+										name: tc.function?.name || '',
+										args: tc.function?.arguments || {},
+									});
+								}
+							}
 						} catch {}
 					}
 				});
 
-				res.on('end', () => resolve(fullText));
+				res.on('end', () => {
+					if (ollamaToolCalls.length > 0) {
+						resolve({ toolCalls: ollamaToolCalls } as any);
+					} else {
+						resolve(fullText);
+					}
+				});
 			});
 
 			req.on('error', (err) => {

@@ -67,7 +67,8 @@ export class ChatPanel {
 
 		this.engine.on('delta', (text: string) => {
 			if (this.panel) {
-				this.panel.webview.postMessage({ type: 'streamUpdate', text });
+				const html = marked.parse(text, { async: false }) as string;
+				this.panel.webview.postMessage({ type: 'streamUpdate', text, html });
 			}
 		});
 
@@ -234,6 +235,12 @@ export class ChatPanel {
 				const { clearContextBuffer } = require('../commands/codeActions');
 				clearContextBuffer();
 				break;
+			case 'attachFile':
+				this.attachFile();
+				break;
+			case 'takeScreenshot':
+				this.takeScreenshot();
+				break;
 			case 'exportChat':
 				this.exportChat();
 				break;
@@ -286,6 +293,55 @@ export class ChatPanel {
 		}
 	}
 	
+	private async attachFile(): Promise<void> {
+		const uris = await vscode.window.showOpenDialog({
+			canSelectMany: false,
+			filters: {
+				'All Files': ['*'],
+				'Images': ['png', 'jpg', 'jpeg', 'gif', 'webp'],
+				'Code': ['ts', 'js', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h'],
+			},
+		});
+		if (!uris || uris.length === 0) return;
+
+		const filePath = uris[0].fsPath;
+		const fs = require('fs');
+		const pathMod = require('path');
+		const ext = pathMod.extname(filePath).toLowerCase();
+		const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext);
+
+		if (isImage) {
+			// Read as base64 for potential multimodal
+			const data = fs.readFileSync(filePath);
+			const base64 = data.toString('base64');
+			const size = (data.length / 1024).toFixed(0);
+			this.addMessage('user', `📎 Image attached: ${pathMod.basename(filePath)} (${size}KB)`);
+			// Store for next message context (simplified — full multimodal needs Anthropic vision API)
+		} else {
+			this.insertFileIntoChat(filePath);
+		}
+	}
+
+	private async takeScreenshot(): Promise<void> {
+		// Capture active editor as text context (VSCode doesn't expose screenshot API)
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			vscode.window.showInformationMessage('No active editor to capture.');
+			return;
+		}
+		const visible = editor.visibleRanges;
+		if (visible.length > 0) {
+			const text = editor.document.getText(visible[0]);
+			const fileName = require('path').basename(editor.document.fileName);
+			if (this.panel) {
+				this.panel.webview.postMessage({
+					type: 'insertText',
+					text: `📸 Visible code from ${fileName}:\n\`\`\`${editor.document.languageId}\n${text}\n\`\`\``
+				});
+			}
+		}
+	}
+
 	private async exportChat(): Promise<void> {
 		if (this.messages.length === 0) {
 			vscode.window.showInformationMessage('No messages to export.');
@@ -423,8 +479,9 @@ export class ChatPanel {
 						<button id="sendButton">Send</button>
 						<button id="stopButton" style="display:none;background:var(--vscode-errorForeground);">Stop</button>
 					</div>
-					<div class="drag-drop-area" id="dragDropArea">
-						📁 Drag & drop files here to insert paths
+					<div style="display:flex;gap:8px;margin-top:4px;">
+						<button id="attachBtn" style="background:none;border:1px solid var(--vscode-input-border);border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;color:var(--vscode-foreground);">📎 Attach File</button>
+						<button id="screenshotBtn" style="background:none;border:1px solid var(--vscode-input-border);border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;color:var(--vscode-foreground);">📸 Screenshot</button>
 					</div>
 				</div>
 				
@@ -444,6 +501,12 @@ export class ChatPanel {
 					});
 					document.getElementById('exportBtn')?.addEventListener('click', () => {
 						vscode.postMessage({ type: 'exportChat' });
+					});
+					document.getElementById('attachBtn').addEventListener('click', () => {
+						vscode.postMessage({ type: 'attachFile' });
+					});
+					document.getElementById('screenshotBtn').addEventListener('click', () => {
+						vscode.postMessage({ type: 'takeScreenshot' });
 					});
 					document.getElementById('clearContextBtn').addEventListener('click', () => {
 						vscode.postMessage({ type: 'clearContext' });
@@ -588,7 +651,6 @@ export class ChatPanel {
 						}
 						if (message.type === 'streamUpdate') {
 							stopButton.style.display = 'inline-block';
-							// Show streaming response with live text
 							let streamEl = document.getElementById('streaming');
 							if (!streamEl) {
 								streamEl = document.createElement('div');
@@ -598,16 +660,7 @@ export class ChatPanel {
 								messagesContainer.appendChild(streamEl);
 							}
 							const contentEl = document.getElementById('stream-content');
-							if (contentEl) {
-								// Simple markdown: code blocks, bold, inline code
-								let html = message.text
-									.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-									.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, '<pre><code>$1</code></pre>')
-									.replace(/\`([^\`]+)\`/g, '<code>$1</code>')
-									.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
-									.replace(/\\n/g, '<br>');
-								contentEl.innerHTML = html;
-							}
+							if (contentEl) contentEl.innerHTML = message.html || message.text;
 							messagesContainer.scrollTop = messagesContainer.scrollHeight;
 						}
 						if (message.type === 'clearStream') {

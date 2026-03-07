@@ -105,7 +105,7 @@ export class SoulClawEngine extends EventEmitter {
 
 			// Get tools based on provider, filtered by user allowlist
 			let tools: any[] | undefined;
-			if (this.config.llmProvider !== 'ollama') {
+			if (true) { // All providers support tools now
 				let allowedTools: string[] | undefined;
 				try {
 					const vscode = require('vscode');
@@ -260,6 +260,8 @@ export class SoulClawEngine extends EventEmitter {
 			}
 			this.setState('ready');
 			this.emit('error', err);
+			// Error reporting — log to output channel with stack
+			this.log(`ERROR: ${err.message}\n${err.stack || ''}`);
 			throw err;
 		}
 	}

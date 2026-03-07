@@ -129,16 +129,26 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 			hashes[f] = crypto.createHash('sha256').update(content).digest('hex');
 		}
 
+		// Run embedded SoulScan for contamination score
+		let scanScore: number | undefined;
+		try {
+			const { scanSoulFiles } = require('../engine/soulscan');
+			const result = scanSoulFiles(rootDir);
+			scanScore = result.score;
+		} catch {}
+
 		// Write metadata
 		const meta = {
 			label: label || cpId,
 			timestamp: new Date().toISOString(),
 			files: existingFiles,
-			hashes
+			hashes,
+			score: scanScore,
 		};
 		fs.writeFileSync(path.join(cpDir, 'checkpoint.json'), JSON.stringify(meta, null, 2));
 
-		vscode.window.showInformationMessage(`✅ Checkpoint "${meta.label}" created (${existingFiles.length} files).`);
+		const scoreText = scanScore !== undefined ? ` · Score: ${scanScore}/100` : '';
+		vscode.window.showInformationMessage(`✅ Checkpoint "${meta.label}" created (${existingFiles.length} files${scoreText}).`);
 		this.refresh();
 	}
 
@@ -211,8 +221,9 @@ class CheckpointNode extends vscode.TreeItem {
 		super(cp.label, vscode.TreeItemCollapsibleState.None);
 
 		const date = cp.timestamp ? new Date(cp.timestamp).toLocaleString() : 'unknown';
-		this.description = `${date} · ${cp.files.length} files`;
-		this.tooltip = `ID: ${cp.id}\nCreated: ${date}\nFiles: ${cp.files.join(', ')}`;
+		const scoreText = cp.score !== undefined ? ` · ${cp.score >= 75 ? '✅' : cp.score >= 50 ? '⚠️' : '❌'} ${cp.score}` : '';
+		this.description = `${date} · ${cp.files.length} files${scoreText}`;
+		this.tooltip = `ID: ${cp.id}\nCreated: ${date}\nFiles: ${cp.files.join(', ')}${cp.score !== undefined ? `\nScan Score: ${cp.score}/100` : ''}`;
 		this.iconPath = new vscode.ThemeIcon('history');
 		this.contextValue = 'checkpoint';
 	}

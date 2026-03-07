@@ -65,6 +65,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
 		},
 	},
 	{
+		name: 'memory_search',
+		description: 'Search through MEMORY.md and memory/*.md files for relevant past context, decisions, and notes.',
+		parameters: {
+			query: { type: 'string', description: 'Search query', required: true },
+		},
+	},
+	{
 		name: 'search_files',
 		description: 'Search for text in files using grep.',
 		parameters: {
@@ -122,7 +129,14 @@ export function executeTool(call: ToolCall, workspaceDir: string): ToolResult {
 				return listFiles(resolvePath(call.args.path, workspaceDir), call.args.recursive);
 			case 'run_command':
 				return runCommand(call.args.command, call.args.cwd || workspaceDir);
-			case 'search_files':
+			case 'memory_search': {
+				const { searchMemory } = require('./memory-search');
+				const results = searchMemory(workspaceDir, call.args.query);
+				if (results.length === 0) return { success: true, output: 'No matching memories found.' };
+				const output = results.map((r: any) => `[${r.file}:${r.line}] (score:${r.score.toFixed(2)}) ${r.text}`).join('\n');
+				return { success: true, output };
+			}
+		case 'search_files':
 				return searchFiles(call.args.pattern, resolvePath(call.args.path, workspaceDir), call.args.include);
 			default:
 				return { success: false, output: `Unknown tool: ${call.name}` };
@@ -223,7 +237,21 @@ function listFiles(dirPath: string, recursive?: boolean): ToolResult {
 	return { success: true, output: entries.join('\n') || '(empty directory)' };
 }
 
+/** Show command in VSCode terminal for visibility */
+function showInTerminal(command: string, cwd: string): void {
+	try {
+		const vscode = require('vscode');
+		let terminal = vscode.window.terminals.find((t: any) => t.name === 'SoulClaw');
+		if (!terminal) {
+			terminal = vscode.window.createTerminal({ name: 'SoulClaw', cwd });
+		}
+		terminal.show(true); // preserve focus
+		terminal.sendText(`# SoulClaw executed: ${command}`, false);
+	} catch {}
+}
+
 function runCommand(command: string, cwd: string): ToolResult {
+	showInTerminal(command, cwd);
 	try {
 		const output = execSync(command, {
 			cwd,
