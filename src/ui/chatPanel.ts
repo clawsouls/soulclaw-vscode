@@ -158,6 +158,16 @@ export class ChatPanel {
 		vscode.window.showInformationMessage('Chat history cleared.');
 	}
 
+	public loadHistory(key: string, wsName: string): void {
+		const saved = this.context.globalState.get<typeof this.messages>(key) || [];
+		this.messages = saved.slice(-ChatPanel.MAX_HISTORY);
+		this.currentWorkspaceKey = key;
+		log(`loadHistory: key=${key} messages=${this.messages.length}`);
+		if (this.panel) {
+			this.updateWebviewContent();
+		}
+	}
+
 	public async switchHistory(): Promise<void> {
 		const index = this.context.globalState.get<string[]>(ChatPanel.HISTORY_INDEX_KEY) || [];
 		if (index.length === 0) {

@@ -41,9 +41,8 @@ export class ChatHistoryProvider implements vscode.TreeDataProvider<HistoryNode>
 	constructor(private context: vscode.ExtensionContext) {
 		context.subscriptions.push(
 			vscode.commands.registerCommand('clawsouls.openChatHistory', (item: ChatHistoryItem) => {
-				// Open chat and switch to this history
 				vscode.commands.executeCommand('clawsouls.openChat');
-				// TODO: integrate with chatPanel.switchToHistory(item.key)
+				vscode.commands.executeCommand('clawsouls.loadHistory', item.key, item.wsName);
 			}),
 			vscode.commands.registerCommand('clawsouls.deleteChatHistory', (node: ChatHistoryNode) => {
 				this.deleteHistory(node.item);

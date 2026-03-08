@@ -39,6 +39,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 		vscode.commands.registerCommand('clawsouls.openChat', () => chatPanel?.show()),
 		vscode.commands.registerCommand('clawsouls.clearChat', () => chatPanel?.clearChat()),
+		vscode.commands.registerCommand('clawsouls.loadHistory', (key: string, wsName: string) => chatPanel?.loadHistory(key, wsName)),
 		vscode.commands.registerCommand('clawsouls.clearSessions', () => engine?.clearSessions()),
 		vscode.commands.registerCommand('clawsouls.switchHistory', () => chatPanel?.switchHistory()),
 		vscode.commands.registerCommand('clawsouls.restartGateway', () => restartEngine()),
