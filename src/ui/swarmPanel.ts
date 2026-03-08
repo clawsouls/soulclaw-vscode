@@ -241,6 +241,15 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 				// Branch already exists — switch to it
 				execSync(`git checkout "${branchName}"`, { cwd: swarmDir, encoding: 'utf8' });
 			}
+			// Ensure at least one commit exists (required for push)
+			try {
+				execSync('git log -1', { cwd: swarmDir, encoding: 'utf8' });
+			} catch {
+				// No commits yet — create initial commit
+				const readmePath = require('path').join(swarmDir, 'README.md');
+				require('fs').writeFileSync(readmePath, `# Swarm Memory\n\nAgent: ${branchName}\n`);
+				execSync('git add -A && git commit -m "init: agent joined"', { cwd: swarmDir, encoding: 'utf8' });
+			}
 			vscode.window.showInformationMessage(`✅ Joined as "${branchName}".`);
 			this.refresh();
 		} catch (err: any) {
