@@ -2,7 +2,7 @@
   "name": "soulclaw-vscode",
   "displayName": "SoulClaw — Soul-Powered AI Agent",
   "description": "Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools",
-  "version": "0.6.12",
+  "version": "0.6.13",
   "publisher": "clawsouls",
   "icon": "media/icon.png",
   "engines": {
