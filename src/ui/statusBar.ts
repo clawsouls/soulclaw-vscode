@@ -62,9 +62,9 @@ export class StatusBarManager {
 		this.chatItem.command = 'clawsouls.openChat';
 		this.chatItem.tooltip = 'Open ClawSouls Chat';
 
-		// Soul status
-		this.soulStatusItem.command = 'clawsouls.openChat';
-		this.soulStatusItem.tooltip = 'Click to open chat with current soul';
+		// Soul status — click to show Soul Explorer
+		this.soulStatusItem.command = 'clawsouls.soulExplorer.focus';
+		this.soulStatusItem.tooltip = 'Click to browse & switch souls';
 		
 		// Agent status
 		this.agentStatusItem.command = 'clawsouls.joinAgent';
