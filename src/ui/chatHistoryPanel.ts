@@ -46,6 +46,24 @@ export class ChatHistoryProvider implements vscode.TreeDataProvider<HistoryNode>
 			}),
 			vscode.commands.registerCommand('clawsouls.deleteChatHistory', (node: ChatHistoryNode) => {
 				this.deleteHistory(node.item);
+			}),
+			vscode.commands.registerCommand('clawsouls.newChat', async () => {
+				const name = await vscode.window.showInputBox({
+					prompt: 'Chat session name',
+					placeHolder: 'e.g. debug-session, feature-planning',
+				});
+				if (!name) return;
+				const indexKey = 'clawsouls.chatHistoryIndex';
+				const index = this.context.globalState.get<string[]>(indexKey) || [];
+				if (!index.includes(name)) {
+					index.push(name);
+					await this.context.globalState.update(indexKey, index);
+				}
+				const key = `clawsouls.chatHistory.${name}`;
+				await this.context.globalState.update(key, []);
+				this.refresh();
+				vscode.commands.executeCommand('clawsouls.openChat');
+				vscode.commands.executeCommand('clawsouls.loadHistory', key, name);
 			})
 		);
 	}
@@ -69,7 +87,7 @@ export class ChatHistoryProvider implements vscode.TreeDataProvider<HistoryNode>
 		const ws = vscode.workspace.workspaceFolders;
 		const currentWs = ws && ws.length > 0 ? ws[0].name : '_no_workspace';
 
-		return index.map(wsName => {
+		const items: HistoryNode[] = index.map(wsName => {
 			const key = `clawsouls.chatHistory.${wsName}`;
 			const msgs = this.context.globalState.get<any[]>(key) || [];
 			return new ChatHistoryNode({
@@ -79,6 +97,8 @@ export class ChatHistoryProvider implements vscode.TreeDataProvider<HistoryNode>
 				isCurrent: wsName === currentWs
 			});
 		});
+		items.push(new ChatHistoryActionNode('➕ New Chat', 'clawsouls.newChat', 'add'));
+		return items;
 	}
 
 	private async deleteHistory(item: ChatHistoryItem): Promise<void> {

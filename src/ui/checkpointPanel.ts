@@ -38,9 +38,11 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		return element;
 	}
 
-	getChildren(element?: CheckpointNode): CheckpointNode[] {
+	getChildren(element?: CheckpointNode): (CheckpointNode | CheckpointActionNode)[] {
 		if (element) return [];
-		return this.checkpoints.map(cp => new CheckpointNode(cp));
+		const items: (CheckpointNode | CheckpointActionNode)[] = this.checkpoints.map(cp => new CheckpointNode(cp));
+		items.push(new CheckpointActionNode('➕ Create Checkpoint', 'clawsouls.createCheckpoint'));
+		return items;
 	}
 
 	/** SoulClaw workspace where soul files live */
@@ -226,5 +228,14 @@ class CheckpointNode extends vscode.TreeItem {
 		this.tooltip = `ID: ${cp.id}\nCreated: ${date}\nFiles: ${cp.files.join(', ')}${cp.score !== undefined ? `\nScan Score: ${cp.score}/100` : ''}`;
 		this.iconPath = new vscode.ThemeIcon('history');
 		this.contextValue = 'checkpoint';
+	}
+}
+
+class CheckpointActionNode extends vscode.TreeItem {
+	constructor(label: string, commandId: string) {
+		super(label, vscode.TreeItemCollapsibleState.None);
+		this.command = { command: commandId, title: label };
+		this.iconPath = new vscode.ThemeIcon('add');
+		this.contextValue = 'checkpointAction';
 	}
 }

@@ -2,7 +2,7 @@
   "name": "soulclaw-vscode",
   "displayName": "SoulClaw — Soul-Powered AI Agent",
   "description": "Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools",
-  "version": "0.6.17",
+  "version": "0.6.37",
   "publisher": "clawsouls",
   "icon": "media/icon.png",
   "engines": {
@@ -64,7 +64,7 @@
         },
         {
           "id": "clawsouls.checkpoints",
-          "name": "📊 Checkpoints"
+          "name": "📊 Soul Checkpoints"
         }
       ]
     },
@@ -180,6 +180,11 @@
       {
         "command": "clawsouls.swarm.switchBranch",
         "title": "Switch Branch"
+      },
+      {
+        "command": "clawsouls.swarm.deleteBranch",
+        "title": "Delete Branch",
+        "icon": "$(trash)"
       },
       {
         "command": "clawsouls.connect",
@@ -309,6 +314,11 @@
         {
           "command": "clawsouls.checkpoint.delete",
           "when": "viewItem == checkpoint",
+          "group": "context"
+        },
+        {
+          "command": "clawsouls.swarm.deleteBranch",
+          "when": "viewItem == swarmBranch",
           "group": "context"
         },
         {

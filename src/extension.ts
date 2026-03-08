@@ -201,20 +201,50 @@ export async function activate(context: vscode.ExtensionContext) {
 			outputChannel.appendLine(`Setup ${result.completed ? 'completed' : 'skipped'}`);
 		}
 
-		// Start Telegram relay if configured
-		const telegram = new TelegramRelay(getStateDir());
-		if (telegram.loadConfig()) {
-			telegram.start((text, from) => {
-				outputChannel.appendLine(`[telegram] ${from}: ${text}`);
-				chatPanel?.addMessage('user', `📱 [${from} via Telegram]: ${text}`);
-				// Auto-respond
-				engine.sendMessage(text).then(response => {
-					telegram.send(response);
-				}).catch(() => {});
-			});
-			outputChannel.appendLine('Telegram relay started');
-			context.subscriptions.push({ dispose: () => telegram.stop() });
+		// Telegram relay — start/restart function
+		let telegram: TelegramRelay | null = null;
+		function startTelegramRelay() {
+			if (telegram) { telegram.stop(); }
+			telegram = new TelegramRelay(getStateDir());
+			if (telegram.loadConfig()) {
+				telegram.start(async (text, from) => {
+					outputChannel.appendLine(`[telegram] ${from}: ${text}`);
+					chatPanel?.addMessage('user', `📱 [${from} via Telegram]: ${text}`);
+					try {
+						outputChannel.appendLine(`[telegram] sending to engine...`);
+						const response = await engine.sendMessage(text);
+						outputChannel.appendLine(`[telegram] engine response (${response.length} chars): ${response.slice(0, 200)}`);
+						if (response) {
+							const sent = await telegram.send(response);
+							outputChannel.appendLine(`[telegram] relay to telegram: ${sent ? 'ok' : 'FAILED'}`);
+						}
+					} catch (err: any) {
+						outputChannel.appendLine(`[telegram] engine error: ${err.message}`);
+						try { await telegram.send(`⚠️ Error: ${err.message}`); } catch {}
+					}
+				});
+				(globalThis as any).__soulclawTelegram = telegram;
+				outputChannel.appendLine('Telegram relay started');
+			} else {
+				outputChannel.appendLine('Telegram relay: no config found');
+			}
 		}
+		startTelegramRelay();
+		// Update status bar after relay has started
+		setTimeout(() => statusBar.updateTelegramStatus(), 500);
+		context.subscriptions.push({ dispose: () => telegram?.stop() });
+
+		// Re-start relay after setup saves config
+		context.subscriptions.push(
+			vscode.commands.registerCommand('clawsouls.restartTelegram', async () => {
+				outputChannel.appendLine('Telegram relay restarting...');
+				startTelegramRelay();
+				// Small delay to ensure relay object is set before status check
+				await new Promise(r => setTimeout(r, 200));
+				statusBar.updateTelegramStatus();
+				outputChannel.appendLine(`Telegram status: ${(globalThis as any).__soulclawTelegram ? 'active' : 'inactive'}`);
+			})
+		);
 
 		// Start engine
 		await restartEngine();

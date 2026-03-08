@@ -8,6 +8,7 @@ export class StatusBarManager {
 	private soulStatusItem: vscode.StatusBarItem;
 	private agentStatusItem: vscode.StatusBarItem;
 	private connectionStatusItem: vscode.StatusBarItem;
+	private telegramItem: vscode.StatusBarItem;
 	private restartItem: vscode.StatusBarItem;
 	private setupItem: vscode.StatusBarItem;
 	
@@ -20,8 +21,9 @@ export class StatusBarManager {
 		this.soulStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
 		this.agentStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
 		this.connectionStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
-		this.restartItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
-		this.setupItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
+		this.telegramItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
+		this.restartItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
+		this.setupItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
 		
 		this.setupStatusItems();
 		this.updateStatusBar();
@@ -49,6 +51,7 @@ export class StatusBarManager {
 			this.soulStatusItem,
 			this.agentStatusItem,
 			this.connectionStatusItem,
+			this.telegramItem,
 			this.restartItem,
 			this.setupItem,
 			soulWatcher,
@@ -67,12 +70,15 @@ export class StatusBarManager {
 		this.soulStatusItem.tooltip = 'Click to browse & switch souls';
 		
 		// Agent status
-		this.agentStatusItem.command = 'clawsouls.joinAgent';
-		this.agentStatusItem.tooltip = 'Current agent/branch - click to switch';
+		this.agentStatusItem.command = 'clawsouls.swarm.focus';
+		this.agentStatusItem.tooltip = 'Current agent/branch - click to open Swarm Memory';
 		
 		// Connection status
 		this.connectionStatusItem.tooltip = 'SoulClaw Engine connection status';
 		
+		// Telegram status
+		this.updateTelegramStatus();
+
 		// Restart button
 		this.restartItem.text = '🔄';
 		this.restartItem.command = 'clawsouls.restartGateway';
@@ -90,6 +96,7 @@ export class StatusBarManager {
 			this.soulStatusItem.show();
 			this.agentStatusItem.show();
 			this.connectionStatusItem.show();
+			this.telegramItem.show();
 			this.restartItem.show();
 			this.setupItem.show();
 		}
@@ -208,6 +215,23 @@ export class StatusBarManager {
 		return 'agent/main';
 	}
 	
+	public updateTelegramStatus(): void {
+		// Check if relay is actually active (set by extension.ts on successful start)
+		const connected = !!(globalThis as any).__soulclawTelegram;
+
+		if (connected) {
+			this.telegramItem.text = '🟢 Telegram';
+			this.telegramItem.tooltip = 'Telegram connected — click to reconfigure';
+			this.telegramItem.command = 'clawsouls.setupTelegram';
+			this.telegramItem.backgroundColor = undefined;
+		} else {
+			this.telegramItem.text = '🔴 Telegram';
+			this.telegramItem.tooltip = 'Telegram not connected — click to set up';
+			this.telegramItem.command = 'clawsouls.setupTelegram';
+			this.telegramItem.backgroundColor = undefined;
+		}
+	}
+
 	public updateSoulName(name: string): void {
 		this.soulStatusItem.text = `🔮 ${name}`;
 	}
@@ -220,6 +244,7 @@ export class StatusBarManager {
 		this.soulStatusItem.dispose();
 		this.agentStatusItem.dispose();
 		this.connectionStatusItem.dispose();
+		this.telegramItem.dispose();
 		this.restartItem.dispose();
 	}
 }

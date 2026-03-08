@@ -24,14 +24,21 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		context.subscriptions.push(
 			vscode.commands.registerCommand('clawsouls.initSwarm', () => this.initSwarm()),
 			vscode.commands.registerCommand('clawsouls.swarmKeys', () => this.manageKeys()),
-			vscode.commands.registerCommand('clawsouls.pushChanges', () => this.runCli('swarm push')),
-			vscode.commands.registerCommand('clawsouls.pullLatest', () => this.runCli('swarm pull')),
+			vscode.commands.registerCommand('clawsouls.pushChanges', () => this.pushWithSync()),
+			vscode.commands.registerCommand('clawsouls.pullLatest', () => this.pullWithSync()),
 			vscode.commands.registerCommand('clawsouls.mergeBranches', () => this.mergeBranches()),
 			vscode.commands.registerCommand('clawsouls.joinAgent', () => this.joinAgent()),
-			vscode.commands.registerCommand('clawsouls.swarm.switchBranch', (node: SwarmBranchNode) => this.switchBranch(node))
+			vscode.commands.registerCommand('clawsouls.swarm.switchBranch', (node: SwarmBranchNode) => this.switchBranch(node)),
+			vscode.commands.registerCommand('clawsouls.swarm.deleteBranch', (node: SwarmBranchNode) => this.deleteBranch(node))
 		);
 
 		this.detectSwarm();
+
+		// Initial memory sync: swarm → workspace on startup
+		if (this.initialized) {
+			const swarmDir = this.getSwarmDir();
+			this.syncSwarmToWorkspace(swarmDir);
+		}
 
 		// Heartbeat auto-sync: pull every 5 minutes if initialized
 		const heartbeatInterval = setInterval(() => {
@@ -48,22 +55,27 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		}, 5 * 60 * 1000);
 		context.subscriptions.push({ dispose: () => clearInterval(heartbeatInterval) });
 
-		// Auto-refresh on swarm directory changes
+		// Auto-refresh on swarm directory changes (debounced)
 		const swarmDir = this.getSwarmDir();
+		let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 		try {
 			const watcher = vscode.workspace.createFileSystemWatcher(
 				new vscode.RelativePattern(swarmDir, '**/*')
 			);
-			watcher.onDidChange(() => this.refresh());
-			watcher.onDidCreate(() => this.refresh());
-			watcher.onDidDelete(() => this.refresh());
+			const debouncedRefresh = () => {
+				if (refreshTimer) clearTimeout(refreshTimer);
+				refreshTimer = setTimeout(() => this.refresh(), 500);
+			};
+			watcher.onDidChange(debouncedRefresh);
+			watcher.onDidCreate(debouncedRefresh);
+			watcher.onDidDelete(debouncedRefresh);
 			context.subscriptions.push(watcher);
 		} catch {}
 	}
 
 	refresh(): void {
 		this.detectSwarm();
-		this._onDidChangeTreeData.fire();
+		this._onDidChangeTreeData.fire(undefined);
 	}
 
 	getTreeItem(element: SwarmNode): vscode.TreeItem {
@@ -303,22 +315,156 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 
 	private async switchBranch(node: SwarmBranchNode): Promise<void> {
 		const swarmDir = this.getSwarmDir();
+		const out = globalThis.__soulclawOutput;
 
 		try {
-			execSync(`git checkout "${node.branch.name}"`, { cwd: swarmDir, encoding: 'utf8' });
-			// Update swarm config for CLI compatibility
+			out?.appendLine(`[Swarm] switchBranch: checking out "${node.branch.name}" in ${swarmDir}`);
+			// Stash any local changes (e.g. swarm.json) before switching
+			try {
+				execSync('git stash --include-untracked', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			} catch {}
+			const result = execSync(`git checkout "${node.branch.name}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			out?.appendLine(`[Swarm] checkout result: ${result.trim()}`);
+			// Pop stash if any
+			try {
+				execSync('git stash pop', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			} catch {}
+
+			// Verify checkout worked
+			const head = execSync('git rev-parse --abbrev-ref HEAD', { cwd: swarmDir, encoding: 'utf8' }).trim();
+			out?.appendLine(`[Swarm] HEAD after checkout: ${head}`);
+
+			// Update swarm config for CLI compatibility + commit so checkout stays clean
 			const configPath = require('path').join(swarmDir, '.soulscan', 'swarm.json');
 			try {
 				const config = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
 				config.agentBranch = node.branch.name;
 				require('fs').writeFileSync(configPath, JSON.stringify(config, null, 2));
+				execSync('git add .soulscan/swarm.json && git commit -m "switch agent branch" --no-verify', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 			} catch {}
-			vscode.window.showInformationMessage(`Switched to "${node.branch.name}".`);
+
+			// Force reload branches before firing tree update
+			this.loadBranches(swarmDir);
+			out?.appendLine(`[Swarm] branches after reload: ${JSON.stringify(this.branches)}`);
+			
+			// Fire tree update immediately + delayed (belt and suspenders)
+			this._onDidChangeTreeData.fire(undefined);
+			setTimeout(() => {
+				out?.appendLine(`[Swarm] delayed fire — branches: ${JSON.stringify(this.branches)}`);
+				this._onDidChangeTreeData.fire(undefined);
+			}, 300);
+
+			// Sync swarm memory → workspace
+			this.syncSwarmToWorkspace(swarmDir, out);
+
+			vscode.window.showInformationMessage(`Switched to "${node.branch.name}". Memory synced.`);
 			// Update status bar agent name
 			try { await vscode.commands.executeCommand('clawsouls.refreshStatusBar'); } catch {}
+		} catch (err: any) {
+			out?.appendLine(`[Swarm] switchBranch error: ${err.message}`);
+			vscode.window.showErrorMessage(`Switch failed: ${err.message}`);
+		}
+	}
+
+	private async pullWithSync(): Promise<void> {
+		const out = globalThis.__soulclawOutput;
+		await this.runCli('swarm pull');
+		const swarmDir = this.getSwarmDir();
+		this.syncSwarmToWorkspace(swarmDir, out);
+	}
+
+	private async pushWithSync(): Promise<void> {
+		const out = globalThis.__soulclawOutput;
+		const swarmDir = this.getSwarmDir();
+		this.syncWorkspaceToSwarm(swarmDir, out);
+		await this.runCli('swarm push');
+	}
+
+	/** Sync swarm branch memory files → workspace (overwrite) */
+	private syncSwarmToWorkspace(swarmDir: string, out?: any): void {
+		const { getWorkspaceDir } = require('../paths');
+		const workspaceDir = getWorkspaceDir();
+
+		// Delete existing memory from workspace
+		const wsMemory = path.join(workspaceDir, 'MEMORY.md');
+		const wsMemoryDir = path.join(workspaceDir, 'memory');
+		if (fs.existsSync(wsMemory)) fs.unlinkSync(wsMemory);
+		if (fs.existsSync(wsMemoryDir)) fs.rmSync(wsMemoryDir, { recursive: true, force: true });
+
+		// Copy MEMORY.md from swarm
+		const swarmMemory = path.join(swarmDir, 'MEMORY.md');
+		if (fs.existsSync(swarmMemory)) {
+			fs.copyFileSync(swarmMemory, wsMemory);
+			out?.appendLine(`[Swarm] synced MEMORY.md → workspace`);
+		}
+
+		// Copy memory/ directory from swarm
+		const swarmMemoryDir = path.join(swarmDir, 'memory');
+		if (fs.existsSync(swarmMemoryDir)) {
+			fs.mkdirSync(wsMemoryDir, { recursive: true });
+			for (const entry of fs.readdirSync(swarmMemoryDir)) {
+				const src = path.join(swarmMemoryDir, entry);
+				if (fs.statSync(src).isFile()) {
+					fs.copyFileSync(src, path.join(wsMemoryDir, entry));
+				}
+			}
+			out?.appendLine(`[Swarm] synced memory/ → workspace`);
+		}
+	}
+
+	/** Sync workspace memory files → swarm branch (before push) */
+	private syncWorkspaceToSwarm(swarmDir: string, out?: any): void {
+		const { getWorkspaceDir } = require('../paths');
+		const workspaceDir = getWorkspaceDir();
+
+		// Copy MEMORY.md to swarm
+		const wsMemory = path.join(workspaceDir, 'MEMORY.md');
+		const swarmMemory = path.join(swarmDir, 'MEMORY.md');
+		if (fs.existsSync(wsMemory)) {
+			fs.copyFileSync(wsMemory, swarmMemory);
+		}
+
+		// Copy memory/ to swarm
+		const wsMemoryDir = path.join(workspaceDir, 'memory');
+		const swarmMemoryDir = path.join(swarmDir, 'memory');
+		if (fs.existsSync(wsMemoryDir)) {
+			fs.mkdirSync(swarmMemoryDir, { recursive: true });
+			for (const entry of fs.readdirSync(wsMemoryDir)) {
+				const src = path.join(wsMemoryDir, entry);
+				if (fs.statSync(src).isFile()) {
+					fs.copyFileSync(src, path.join(swarmMemoryDir, entry));
+				}
+			}
+		}
+
+		// Stage and commit
+		try {
+			execSync('git add MEMORY.md memory/ 2>/dev/null; git diff --cached --quiet || git commit -m "sync workspace memory" --no-verify', 
+				{ cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			out?.appendLine(`[Swarm] synced workspace → swarm`);
+		} catch {}
+	}
+
+	private async deleteBranch(node: SwarmBranchNode): Promise<void> {
+		if (node.branch.current) {
+			vscode.window.showWarningMessage('Cannot delete the current branch.');
+			return;
+		}
+
+		const confirm = await vscode.window.showWarningMessage(
+			`Delete branch "${node.branch.name}"? This cannot be undone.`,
+			{ modal: true },
+			'Delete'
+		);
+		if (confirm !== 'Delete') return;
+
+		const swarmDir = this.getSwarmDir();
+		try {
+			execSync(`git branch -D "${node.branch.name}"`, { cwd: swarmDir, encoding: 'utf8' });
+			vscode.window.showInformationMessage(`Branch "${node.branch.name}" deleted.`);
 			this.refresh();
 		} catch (err: any) {
-			vscode.window.showErrorMessage(`Switch failed: ${err.message}`);
+			vscode.window.showErrorMessage(`Failed to delete branch: ${err.message}`);
 		}
 	}
 
@@ -395,7 +541,7 @@ class SwarmBranchNode extends vscode.TreeItem {
 		);
 		this.description = branch.current ? '● current' : '';
 		this.iconPath = new vscode.ThemeIcon(branch.current ? 'git-branch' : 'git-branch');
-		this.contextValue = 'swarmBranch';
+		this.contextValue = branch.current ? 'swarmBranchCurrent' : 'swarmBranch';
 
 		if (!branch.current) {
 			this.command = {

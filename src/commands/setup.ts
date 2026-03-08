@@ -32,7 +32,7 @@ export function setupWizard(): Promise<{ completed: boolean }> {
 		);
 
 		let currentStep = 1;
-		const maxSteps = 5;
+		const maxSteps = 6;
 		let selectedProvider = '';
 		let finished = false;
 
@@ -77,6 +77,11 @@ export function setupWizard(): Promise<{ completed: boolean }> {
 					break;
 				case 'saveTelegram':
 					await saveTelegramConfig(message.data.botToken, message.data.chatId);
+					// Restart relay so it picks up new config without requiring Reload Window
+					try { await vscode.commands.executeCommand('clawsouls.restartTelegram'); } catch {}
+					// Advance to next step in wizard
+					currentStep++;
+					updateWebviewContent(panel, currentStep, selectedProvider);
 					break;
 				case 'fetchSouls':
 					try {
@@ -101,6 +106,9 @@ export function setupWizard(): Promise<{ completed: boolean }> {
 					} catch (err: any) {
 						panel.webview.postMessage({ type: 'soulApplied', success: false, error: err.message });
 					}
+					break;
+				case 'checkOllama':
+					checkOllamaSetup(panel);
 					break;
 			}
 		});
@@ -139,6 +147,9 @@ async function handleNextStep(panel: vscode.WebviewPanel, data: any, step: numbe
 					await createCustomSoul(data.soulName);
 				}
 				break;
+			case 4:
+				// Telegram handled by 'saveTelegram' message type
+				break;
 		}
 	} catch (err) {
 		console.error(`Setup step ${step} error:`, err);
@@ -162,37 +173,41 @@ function getWorkspaceDirectory(): string {
 }
 
 async function applySoulFromOnboarding(owner: string, name: string): Promise<void> {
-	const detail = await apiGet(`/souls/${owner}/${name}?files=true`);
+	const bundle = await apiGet(`/bundle/${owner}/${name}`);
+	const bundleFiles: Record<string, string> = bundle.files || {};
+	const manifest = bundle.manifest || {};
 	const targetDir = getWorkspaceDirectory();
 	fs.mkdirSync(targetDir, { recursive: true });
 
-	const soulJson = {
-		name: detail.name,
-		displayName: detail.displayName,
-		description: detail.description,
-		version: detail.version,
-		specVersion: '0.5',
-		license: detail.license,
-		tags: detail.tags,
-		category: detail.category,
-		author: detail.author,
-		files: detail.files
+	const knownFiles: Record<string, string> = {
+		'SOUL.md': 'soul', 'IDENTITY.md': 'identity', 'STYLE.md': 'style',
+		'AGENTS.md': 'agents', 'README.md': 'readme', 'HEARTBEAT.md': 'heartbeat',
+		'USER.md': 'user', 'MEMORY.md': 'memory', 'TOOLS.md': 'tools', 'BOOTSTRAP.md': 'bootstrap',
 	};
 
-	const fileNames = Array.isArray(detail.files) ? detail.files as string[] : [];
-	const fileContentsMap = detail.fileContents || {};
-	const fileNameMap: Record<string, string> = {
-		'soul': 'SOUL.md', 'identity': 'IDENTITY.md', 'style': 'STYLE.md',
-		'agents': 'AGENTS.md', 'readme': 'README.md', 'heartbeat': 'HEARTBEAT.md',
-		'user': 'USER.md', 'memory': 'MEMORY.md', 'tools': 'TOOLS.md', 'bootstrap': 'BOOTSTRAP.md'
+	const filesMap: Record<string, string> = {};
+	for (const filename of Object.keys(bundleFiles)) {
+		if (filename === 'soul.json' || filename === 'LICENSE') continue;
+		const key = knownFiles[filename] || filename;
+		filesMap[key] = filename;
+	}
+
+	const soulJson = {
+		name: manifest.name || name,
+		displayName: manifest.displayName || name,
+		description: manifest.description || '',
+		version: manifest.version || '1.0.0',
+		specVersion: '0.5',
+		license: manifest.license || 'Apache-2.0',
+		tags: manifest.tags || [],
+		category: manifest.category || 'general',
+		files: filesMap
 	};
 
 	fs.writeFileSync(path.join(targetDir, 'soul.json'), JSON.stringify(soulJson, null, 2));
-	for (let i = 0; i < fileNames.length; i++) {
-		const key = fileNames[i];
-		const content = fileContentsMap[String(i)];
-		if (!content || key === 'soul.json') continue;
-		const filename = fileNameMap[key] || `${key.toUpperCase()}.md`;
+	for (const [filename, content] of Object.entries(bundleFiles)) {
+		if (filename === 'soul.json') continue;
+		if (typeof content !== 'string') continue;
 		fs.writeFileSync(path.join(targetDir, filename), content);
 	}
 }
@@ -364,7 +379,9 @@ function getWebviewContent(step: number, provider?: string): string {
 		case 4:
 			return getStep4TelegramHtml();
 		case 5:
-			return getStep5CompleteHtml();
+			return getStep5OllamaMemoryHtml();
+		case 6:
+			return getStep6CompleteHtml();
 		default:
 			return getStep1Html();
 	}
@@ -417,7 +434,7 @@ function getStep1Html(): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🔮 Welcome to SoulClaw</h1>
-					<p>Step 1 of 5: Choose your LLM provider</p>
+					<p>Step 1 of 6: Choose your LLM provider</p>
 				</div>
 				
 				<div class="provider-card" data-provider="anthropic">
@@ -519,7 +536,7 @@ function getStep2Html(provider?: string): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🏠 Ollama Configuration</h1>
-					<p>Step 2 of 5: Configure your local Ollama instance</p>
+					<p>Step 2 of 6: Configure your local Ollama instance</p>
 				</div>
 
 				<div class="config-section">
@@ -606,7 +623,7 @@ function getStep2Html(provider?: string): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🔑 Authentication</h1>
-					<p>Step 2 of 5: Set up your ${providerName} API access</p>
+					<p>Step 2 of 6: Set up your ${providerName} API access</p>
 				</div>
 
 				<div class="auth-option">
@@ -735,7 +752,7 @@ function getStep3Html(): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🎭 Choose Your Soul</h1>
-					<p>Step 3 of 5: Pick an AI persona from the community</p>
+					<p>Step 3 of 6: Pick an AI persona from the community</p>
 				</div>
 
 				<input class="search-bar" id="searchInput" type="text" placeholder="Search souls..." />
@@ -938,7 +955,7 @@ function getStep4TelegramHtml(): string {
 			<div class="container">
 				<div class="step-header">
 					<h1>🔗 Connect Telegram</h1>
-					<p>Step 4 of 5: Get notifications via Telegram (optional)</p>
+					<p>Step 4 of 6: Get notifications via Telegram (optional)</p>
 				</div>
 
 				<div class="config-section">
@@ -1009,7 +1026,6 @@ function getStep4TelegramHtml(): string {
 					if (botToken && chatId) {
 						vscode.postMessage({ type: 'saveTelegram', data: { botToken, chatId } });
 					}
-					vscode.postMessage({ type: 'next', data: {} });
 				}
 
 				function skipTelegram() {
@@ -1025,7 +1041,136 @@ function getStep4TelegramHtml(): string {
 	`;
 }
 
-function getStep5CompleteHtml(): string {
+function getStep5OllamaMemoryHtml(): string {
+	return `
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<meta charset="UTF-8">
+			<title>SoulClaw Setup - Semantic Memory</title>
+			<style>
+				body { font-family: var(--vscode-font-family); padding: 20px; }
+				.container { max-width: 600px; margin: 0 auto; }
+				.step-header { text-align: center; margin-bottom: 30px; }
+				.config-section {
+					border: 1px solid var(--vscode-input-border);
+					border-radius: 8px;
+					padding: 20px;
+					margin: 15px 0;
+				}
+				.recommended { color: var(--vscode-charts-green); font-weight: bold; }
+				.hint { color: var(--vscode-descriptionForeground); font-size: 12px; margin-top: 6px; line-height: 1.5; }
+				.buttons { text-align: center; margin-top: 30px; }
+				button {
+					margin: 0 10px;
+					padding: 10px 20px;
+					border: none;
+					background: var(--vscode-button-background);
+					color: var(--vscode-button-foreground);
+					border-radius: 4px;
+					cursor: pointer;
+				}
+				.status-box { margin-top: 12px; padding: 10px; border-radius: 6px; font-size: 13px; display: none; }
+				.status-ok { background: rgba(0,200,0,0.12); color: #4caf50; display: block; }
+				.status-err { background: rgba(255,200,0,0.12); color: #ff9800; display: block; }
+				.status-loading { background: rgba(100,100,255,0.12); color: #90caf9; display: block; }
+				.feature-list { margin: 12px 0; padding-left: 20px; }
+				.feature-list li { margin: 6px 0; font-size: 13px; }
+				code { background: var(--vscode-textCodeBlock-background); padding: 2px 6px; border-radius: 3px; }
+			</style>
+		</head>
+		<body>
+			<div class="container">
+				<div class="step-header">
+					<h1>🧠 Semantic Memory Search</h1>
+					<p>Step 5 of 6: Enable AI-powered memory <span class="recommended">(Recommended)</span></p>
+				</div>
+
+				<div class="config-section">
+					<h3>What is this?</h3>
+					<p>SoulClaw can use a local embedding model to search your AI's memory semantically — not just keyword matching, but understanding meaning.</p>
+					<ul class="feature-list">
+						<li>🔍 <strong>Semantic search</strong> across MEMORY.md and memory files</li>
+						<li>🌐 <strong>100+ languages</strong> supported (Korean, English, etc.)</li>
+						<li>🔒 <strong>100% local</strong> — your data never leaves your machine</li>
+						<li>⚡ <strong>Fast</strong> — runs on CPU, no GPU required</li>
+					</ul>
+				</div>
+
+				<div class="config-section">
+					<h3>Requirements</h3>
+					<p>This requires <a href="https://ollama.com" style="color:var(--vscode-textLink-foreground)">Ollama</a> with the <code>bge-m3</code> embedding model (~670MB).</p>
+					<div class="hint">If Ollama is already installed, click "Check & Install" to pull the model automatically.</div>
+
+					<div style="margin-top: 16px; display: flex; gap: 10px;">
+						<button onclick="checkOllama()" style="padding:8px 16px;">🔍 Check & Install</button>
+					</div>
+					<div class="status-box" id="statusBox"></div>
+				</div>
+
+				<div class="buttons">
+					<button onclick="back()">← Back</button>
+					<button onclick="skipStep()">Skip</button>
+					<button id="nextBtn" onclick="next()">Next →</button>
+				</div>
+			</div>
+
+			<script>
+				const vscode = acquireVsCodeApi();
+
+				function showStatus(cls, text) {
+					const el = document.getElementById('statusBox');
+					el.className = 'status-box ' + cls;
+					el.innerHTML = text;
+				}
+
+				function checkOllama() {
+					showStatus('status-loading', '⏳ Checking Ollama...');
+					vscode.postMessage({ type: 'checkOllama' });
+				}
+
+				window.addEventListener('message', event => {
+					const msg = event.data;
+					if (msg.type === 'ollamaCheckResult') {
+						if (msg.ollamaInstalled && msg.modelReady) {
+							showStatus('status-ok', '✅ Ollama installed and bge-m3 model ready!');
+						} else if (msg.ollamaInstalled && !msg.modelReady) {
+							if (msg.pulling) {
+								showStatus('status-loading', '⬇️ Pulling bge-m3 model... This may take a few minutes.');
+							} else {
+								showStatus('status-err', '⚠️ Ollama found but bge-m3 not installed. Click "Check & Install" to pull it.');
+							}
+						} else {
+							showStatus('status-err', '⚠️ Ollama not found. <a href="https://ollama.com" style="color:inherit;text-decoration:underline;">Install Ollama</a> first, then try again.');
+						}
+					}
+					if (msg.type === 'ollamaPullResult') {
+						if (msg.success) {
+							showStatus('status-ok', '✅ bge-m3 model installed successfully!');
+						} else {
+							showStatus('status-err', '❌ Failed to pull model: ' + (msg.error || 'Unknown error'));
+						}
+					}
+				});
+
+				function next() {
+					vscode.postMessage({ type: 'next', data: {} });
+				}
+
+				function skipStep() {
+					vscode.postMessage({ type: 'next', data: {} });
+				}
+
+				function back() {
+					vscode.postMessage({ type: 'back' });
+				}
+			</script>
+		</body>
+		</html>
+	`;
+}
+
+function getStep6CompleteHtml(): string {
 	return `
 		<!DOCTYPE html>
 		<html>
@@ -1082,6 +1227,45 @@ function getStep5CompleteHtml(): string {
 	`;
 }
 
+async function checkOllamaSetup(panel: vscode.WebviewPanel): Promise<void> {
+	const { execSync, exec } = require('child_process');
+	
+	// Check if Ollama is installed
+	let ollamaInstalled = false;
+	try {
+		execSync('ollama --version', { encoding: 'utf8', timeout: 5000 });
+		ollamaInstalled = true;
+	} catch {}
+
+	if (!ollamaInstalled) {
+		panel.webview.postMessage({ type: 'ollamaCheckResult', ollamaInstalled: false, modelReady: false });
+		return;
+	}
+
+	// Check if bge-m3 model is available
+	let modelReady = false;
+	try {
+		const models = execSync('ollama list', { encoding: 'utf8', timeout: 10000 });
+		modelReady = models.includes('bge-m3');
+	} catch {}
+
+	if (modelReady) {
+		panel.webview.postMessage({ type: 'ollamaCheckResult', ollamaInstalled: true, modelReady: true });
+		return;
+	}
+
+	// Model not found — pull it
+	panel.webview.postMessage({ type: 'ollamaCheckResult', ollamaInstalled: true, modelReady: false, pulling: true });
+
+	exec('ollama pull bge-m3', { timeout: 300000 }, (err: any) => {
+		if (err) {
+			panel.webview.postMessage({ type: 'ollamaPullResult', success: false, error: err.message });
+		} else {
+			panel.webview.postMessage({ type: 'ollamaPullResult', success: true });
+		}
+	});
+}
+
 /** Standalone Telegram setup — accessible from Command Palette */
 export function setupTelegram(): void {
 	const panel = vscode.window.createWebviewPanel(
@@ -1093,7 +1277,21 @@ export function setupTelegram(): void {
 
 	let html = getStep4TelegramHtml();
 	// Adjust UI for standalone mode
-	html = html.replace('Step 4 of 5: Get notifications via Telegram (optional)', 'Connect your Telegram bot');
+	html = html.replace('Step 4 of 6: Get notifications via Telegram (optional)', 'Connect your Telegram bot');
+	// Pre-fill existing config
+	try {
+		const fs = require('fs');
+		const path = require('path');
+		const { getStateDir } = require('../paths');
+		const configPath = path.join(getStateDir(), 'config.yaml');
+		if (fs.existsSync(configPath)) {
+			const content = fs.readFileSync(configPath, 'utf8');
+			const tokenMatch = content.match(/token:\s*['"]?([^\s'"]+)/);
+			const chatMatch = content.match(/chatId:\s*['"]?([^\s'"]+)/);
+			if (tokenMatch) html = html.replace('id="botToken" placeholder', `id="botToken" value="${tokenMatch[1]}" placeholder`);
+			if (chatMatch) html = html.replace('id="chatId" placeholder', `id="chatId" value="${chatMatch[1]}" placeholder`);
+		}
+	} catch {}
 	panel.webview.html = html;
 
 	panel.webview.onDidReceiveMessage(async (message: any) => {
@@ -1108,7 +1306,8 @@ export function setupTelegram(): void {
 				break;
 			case 'saveTelegram':
 				await saveTelegramConfig(message.data.botToken, message.data.chatId);
-				vscode.window.showInformationMessage('✅ Telegram connected! Restart SoulClaw to activate.');
+				try { await vscode.commands.executeCommand('clawsouls.restartTelegram'); } catch {}
+				vscode.window.showInformationMessage('✅ Telegram connected and active!');
 				panel.dispose();
 				break;
 			case 'next':

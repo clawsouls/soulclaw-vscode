@@ -129,6 +129,13 @@ All data stored in VSCode's `globalStorage` (cleaned up on uninstall):
 
 This extension is provided "as is" without warranty of any kind. It is an independent project by [ClawSouls](https://clawsouls.ai) and is **not officially affiliated with or endorsed by the OpenClaw project**. Use at your own risk.
 
+## Roadmap
+
+- **v0.7** — Streaming responses, conversation compaction, model selection UI
+- **v0.8** — Shared engine core (`@clawsouls/engine-core`), plugin SDK
+- **v0.9** — VS Marketplace publish, multi-agent orchestration
+- **v1.0** — Full SoulClaw CLI parity, embedded source engine
+
 ## License
 
 **Apache License 2.0** (extension) + **MIT** (embedded OpenClaw runtime).
