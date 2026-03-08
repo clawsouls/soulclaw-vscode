@@ -497,9 +497,11 @@ export class ChatPanel {
 					const messagesContainer = document.getElementById('messages');
 					const dragDropArea = document.getElementById('dragDropArea');
 
-					// Auto-scroll to bottom on load
+					// Auto-scroll to bottom on load (instant, no animation)
 					if (messagesContainer) {
-						messagesContainer.scrollTop = messagesContainer.scrollHeight;
+						requestAnimationFrame(() => {
+							messagesContainer.scrollTop = messagesContainer.scrollHeight;
+						});
 					}
 					
 					// Clear & History buttons

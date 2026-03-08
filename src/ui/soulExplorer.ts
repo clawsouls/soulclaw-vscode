@@ -308,6 +308,10 @@ ${scan}
 				if (fs.existsSync(memoryDir)) {
 					fs.rmSync(memoryDir, { recursive: true, force: true });
 				}
+				// Also clear chat history for a fresh start with new soul
+				try {
+					await vscode.commands.executeCommand('clawsouls.clearChat');
+				} catch {}
 			}
 			this.refresh();
 
