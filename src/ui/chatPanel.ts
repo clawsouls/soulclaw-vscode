@@ -68,13 +68,12 @@ export class ChatPanel {
 			});
 		});
 
-		this.engine.on('delta', (text: string) => {
-			const html = marked.parse(text, { async: false }) as string;
-			this.postToWebview({ type: 'streamUpdate', text, html });
+		this.engine.on('delta', (_text: string) => {
+			// Streaming updates are unreliable via postMessage.
+			// Final re-render happens on 'final' event via addMessage → updateWebviewContent.
 		});
 
 		this.engine.on('final', (message: any) => {
-			this.postToWebview({ type: 'clearStream' });
 			if (message?.content) {
 				this.addMessage('assistant', message.content);
 			}
@@ -138,19 +137,8 @@ export class ChatPanel {
 		this.context.globalState.update(this.currentWorkspaceKey, this.messages);
 		
 		if (this.panel) {
-			// Clear streaming indicator before updating
-			if (role === 'assistant') {
-				this.postToWebview({ type: 'clearStream' });
-			}
-			// Append single message instead of full re-render
-			const time = new Date(msg.timestamp).toLocaleTimeString();
-			const html = marked.parse(msg.content, { async: false }) as string;
-			this.postToWebview({
-				type: 'appendMessage',
-				role: msg.role,
-				html,
-				time
-			});
+			// Full re-render to ensure messages are displayed
+			this.updateWebviewContent();
 		} else {
 			// Panel not open — message saved but not displayed.
 			// When panel opens, updateWebviewContent() will render all saved messages.
@@ -508,6 +496,11 @@ export class ChatPanel {
 					const sendButton = document.getElementById('sendButton');
 					const messagesContainer = document.getElementById('messages');
 					const dragDropArea = document.getElementById('dragDropArea');
+
+					// Auto-scroll to bottom on load
+					if (messagesContainer) {
+						messagesContainer.scrollTop = messagesContainer.scrollHeight;
+					}
 					
 					// Clear & History buttons
 					document.getElementById('clearBtn').addEventListener('click', () => {
