@@ -264,8 +264,16 @@ ${scan}
 			};
 
 			// Write to target directories
+			const soulFiles = ['soul.json', 'SOUL.md', 'IDENTITY.md', 'STYLE.md', 'AGENTS.md', 
+				'README.md', 'HEARTBEAT.md', 'USER.md', 'TOOLS.md', 'BOOTSTRAP.md'];
 			for (const dir of targetDirs) {
 				fs.mkdirSync(dir, { recursive: true });
+
+				// Remove previous soul files first
+				for (const f of soulFiles) {
+					const fp = path.join(dir, f);
+					if (fs.existsSync(fp)) fs.unlinkSync(fp);
+				}
 
 				// Write soul.json
 				fs.writeFileSync(path.join(dir, 'soul.json'), JSON.stringify(soulJson, null, 2));
