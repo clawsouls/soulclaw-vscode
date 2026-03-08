@@ -360,9 +360,10 @@ export class ChatPanel {
 
 	private async takeScreenshot(): Promise<void> {
 		// Capture active editor as text context (VSCode doesn't expose screenshot API)
-		const editor = vscode.window.activeTextEditor;
+		// activeTextEditor may be null when chat webview has focus, so fall back to visibleTextEditors
+		const editor = vscode.window.activeTextEditor || vscode.window.visibleTextEditors[0];
 		if (!editor) {
-			vscode.window.showInformationMessage('No active editor to capture.');
+			vscode.window.showInformationMessage('No active editor to capture. Open a file first.');
 			return;
 		}
 		const visible = editor.visibleRanges;
