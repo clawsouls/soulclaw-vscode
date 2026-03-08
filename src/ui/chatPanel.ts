@@ -4,6 +4,13 @@ import { marked } from 'marked';
 import type { SoulClawEngine } from '../engine';
 import { workspaceTracker } from '../extension';
 
+const log = (...args: any[]) => {
+	try {
+		const ch = (globalThis as any).__soulclawOutput;
+		if (ch) ch.appendLine(`[ChatPanel] ${args.join(' ')}`);
+	} catch {}
+};
+
 export class ChatPanel {
 	private panel: vscode.WebviewPanel | null = null;
 	private messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp: number }> = [];
@@ -11,8 +18,6 @@ export class ChatPanel {
 	private static readonly MAX_HISTORY = 200;
 	private currentWorkspaceKey: string;
 	private contextItems: Array<{ label: string; snippet: any }> = [];
-	private webviewReady = false;
-	private messageQueue: any[] = [];
 	
 	constructor(
 		private context: vscode.ExtensionContext,
@@ -85,20 +90,9 @@ export class ChatPanel {
 		});
 	}
 
-	/** Post a message to webview, queuing if not ready yet */
+	/** Post a message to webview if panel exists */
 	private postToWebview(msg: any): void {
-		if (this.panel && this.webviewReady) {
-			this.panel.webview.postMessage(msg);
-		} else {
-			this.messageQueue.push(msg);
-		}
-	}
-
-	private flushQueue(): void {
-		if (!this.panel) return;
-		const queued = [...this.messageQueue];
-		this.messageQueue = [];
-		for (const msg of queued) {
+		if (this.panel) {
 			this.panel.webview.postMessage(msg);
 		}
 	}
@@ -125,21 +119,11 @@ export class ChatPanel {
 			}
 		);
 		
-		this.webviewReady = false;
-
 		this.panel.onDidDispose(() => {
 			this.panel = null;
-			this.webviewReady = false;
 		});
 		
-		this.panel.webview.onDidReceiveMessage((msg: any) => {
-			if (msg.type === 'webviewReady') {
-				this.webviewReady = true;
-				this.flushQueue();
-				return;
-			}
-			this.handleWebviewMessage(msg);
-		});
+		this.panel.webview.onDidReceiveMessage(this.handleWebviewMessage.bind(this));
 		
 		this.updateWebviewContent();
 	}
@@ -284,6 +268,7 @@ export class ChatPanel {
 	}
 	
 	private async sendMessageToAgent(text: string): Promise<void> {
+		log(`sendMessageToAgent: "${text.slice(0, 50)}" panel=${!!this.panel}`);
 		// Add user message to chat
 		this.addMessage('user', text);
 
@@ -724,8 +709,6 @@ export class ChatPanel {
 						}
 					});
 
-					// Signal extension that webview is ready to receive messages
-					vscode.postMessage({ type: 'webviewReady' });
 				</script>
 			</body>
 			</html>

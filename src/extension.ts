@@ -24,6 +24,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	initStateDir(context);
 	// Create output channel
 	outputChannel = vscode.window.createOutputChannel('SoulClaw');
+	(globalThis as any).__soulclawOutput = outputChannel;
 	context.subscriptions.push(outputChannel);
 	outputChannel.appendLine('SoulClaw v0.6.0 activated (embedded engine)');
 
