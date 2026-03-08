@@ -11,6 +11,8 @@ export class ChatPanel {
 	private static readonly MAX_HISTORY = 200;
 	private currentWorkspaceKey: string;
 	private contextItems: Array<{ label: string; snippet: any }> = [];
+	private webviewReady = false;
+	private messageQueue: any[] = [];
 	
 	constructor(
 		private context: vscode.ExtensionContext,
@@ -30,17 +32,13 @@ export class ChatPanel {
 		// Track this workspace in the index
 		this.updateHistoryIndex(wsName);
 
-		// Listen for engine events
+		// Listen for engine events — use postToWebview for safe queuing
 		this.engine.on('toolCall', (data: { name: string; args: any }) => {
-			if (this.panel) {
-				this.panel.webview.postMessage({ type: 'toolCall', name: data.name, args: data.args });
-			}
+			this.postToWebview({ type: 'toolCall', name: data.name, args: data.args });
 		});
 
 		this.engine.on('toolResult', (data: { name: string; success: boolean; output: string }) => {
-			if (this.panel) {
-				this.panel.webview.postMessage({ type: 'toolResult', name: data.name, success: data.success, output: data.output });
-			}
+			this.postToWebview({ type: 'toolResult', name: data.name, success: data.success, output: data.output });
 		});
 
 		this.engine.on('fileChanged', async (filePath: string) => {
@@ -66,16 +64,12 @@ export class ChatPanel {
 		});
 
 		this.engine.on('delta', (text: string) => {
-			if (this.panel) {
-				const html = marked.parse(text, { async: false }) as string;
-				this.panel.webview.postMessage({ type: 'streamUpdate', text, html });
-			}
+			const html = marked.parse(text, { async: false }) as string;
+			this.postToWebview({ type: 'streamUpdate', text, html });
 		});
 
 		this.engine.on('final', (message: any) => {
-			if (this.panel) {
-				this.panel.webview.postMessage({ type: 'clearStream' });
-			}
+			this.postToWebview({ type: 'clearStream' });
 			if (message?.content) {
 				this.addMessage('assistant', message.content);
 			}
@@ -87,10 +81,26 @@ export class ChatPanel {
 
 		this.engine.on('stateChange', (state: string) => {
 			const mappedState = state === 'ready' ? 'connected' : state === 'running' ? 'connected' : state;
-			if (this.panel) {
-				this.panel.webview.postMessage({ type: 'stateUpdate', state: mappedState });
-			}
+			this.postToWebview({ type: 'stateUpdate', state: mappedState });
 		});
+	}
+
+	/** Post a message to webview, queuing if not ready yet */
+	private postToWebview(msg: any): void {
+		if (this.panel && this.webviewReady) {
+			this.postToWebview(msg);
+		} else {
+			this.messageQueue.push(msg);
+		}
+	}
+
+	private flushQueue(): void {
+		if (!this.panel) return;
+		const queued = [...this.messageQueue];
+		this.messageQueue = [];
+		for (const msg of queued) {
+			this.panel.webview.postMessage(msg);
+		}
 	}
 	
 	public show(): void {
@@ -98,7 +108,7 @@ export class ChatPanel {
 			this.panel.reveal();
 			// Re-send current state on reveal
 			const state = this.engine.state === 'ready' ? 'connected' : this.engine.state;
-			this.panel.webview.postMessage({ type: 'stateUpdate', state });
+			this.postToWebview({ type: 'stateUpdate', state });
 			return;
 		}
 		
@@ -115,11 +125,21 @@ export class ChatPanel {
 			}
 		);
 		
+		this.webviewReady = false;
+
 		this.panel.onDidDispose(() => {
 			this.panel = null;
+			this.webviewReady = false;
 		});
 		
-		this.panel.webview.onDidReceiveMessage(this.handleWebviewMessage.bind(this));
+		this.panel.webview.onDidReceiveMessage((msg: any) => {
+			if (msg.type === 'webviewReady') {
+				this.webviewReady = true;
+				this.flushQueue();
+				return;
+			}
+			this.handleWebviewMessage(msg);
+		});
 		
 		this.updateWebviewContent();
 	}
@@ -136,12 +156,12 @@ export class ChatPanel {
 		if (this.panel) {
 			// Clear streaming indicator before updating
 			if (role === 'assistant') {
-				this.panel.webview.postMessage({ type: 'clearStream' });
+				this.postToWebview({ type: 'clearStream' });
 			}
 			// Append single message instead of full re-render
 			const time = new Date(msg.timestamp).toLocaleTimeString();
 			const html = marked.parse(msg.content, { async: false }) as string;
-			this.panel.webview.postMessage({
+			this.postToWebview({
 				type: 'appendMessage',
 				role: msg.role,
 				html,
@@ -216,7 +236,7 @@ export class ChatPanel {
 	public notifyContextUpdate(items: Array<{ label: string; snippet: any }>): void {
 		this.contextItems = items;
 		if (this.panel) {
-			this.panel.webview.postMessage({
+			this.postToWebview({
 				type: 'contextUpdate',
 				items: items.map(i => i.label),
 			});
@@ -293,12 +313,12 @@ export class ChatPanel {
 			}
 			const content = fs.readFileSync(filePath, 'utf8');
 			const filename = pathMod.basename(filePath);
-			this.panel.webview.postMessage({
+			this.postToWebview({
 				type: 'insertText',
 				text: `📁 ${filename}:\n\`\`\`\n${content}\n\`\`\``
 			});
 		} catch {
-			this.panel.webview.postMessage({
+			this.postToWebview({
 				type: 'insertText',
 				text: `📁 ${filePath}`
 			});
@@ -346,7 +366,7 @@ export class ChatPanel {
 			const text = editor.document.getText(visible[0]);
 			const fileName = require('path').basename(editor.document.fileName);
 			if (this.panel) {
-				this.panel.webview.postMessage({
+				this.postToWebview({
 					type: 'insertText',
 					text: `📸 Visible code from ${fileName}:\n\`\`\`${editor.document.languageId}\n${text}\n\`\`\``
 				});
@@ -703,6 +723,9 @@ export class ChatPanel {
 							}
 						}
 					});
+
+					// Signal extension that webview is ready to receive messages
+					vscode.postMessage({ type: 'webviewReady' });
 				</script>
 			</body>
 			</html>
