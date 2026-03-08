@@ -35,7 +35,7 @@ function apiGet(urlPath: string): Promise<any> {
 	});
 }
 
-type TreeNode = CategoryNode | RemoteSoulNode | LocalSoulFile;
+type TreeNode = CategoryNode | RemoteSoulNode | LocalSoulFile | MessageNode;
 
 export class SoulExplorerProvider implements vscode.TreeDataProvider<TreeNode> {
 	private _onDidChangeTreeData = new vscode.EventEmitter<TreeNode | undefined | null | void>();

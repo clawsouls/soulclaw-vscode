@@ -79,6 +79,7 @@ export class LLMClient extends EventEmitter {
 		const body = JSON.stringify(payload);
 
 		return new Promise((resolve, reject) => {
+			let fullText = '';
 			const req = https.request({
 				hostname: 'api.anthropic.com',
 				path: '/v1/messages',
@@ -97,7 +98,7 @@ export class LLMClient extends EventEmitter {
 					return;
 				}
 
-				let fullText = '';
+				fullText = '';
 				let buffer = '';
 				const toolCalls: Array<{ id: string; name: string; args: string }> = [];
 				let currentToolIndex = -1;
@@ -174,6 +175,7 @@ export class LLMClient extends EventEmitter {
 		const body = JSON.stringify(payload);
 
 		return new Promise((resolve, reject) => {
+			let fullText = '';
 			const req = https.request({
 				hostname: 'api.openai.com',
 				path: '/v1/chat/completions',
@@ -190,7 +192,7 @@ export class LLMClient extends EventEmitter {
 					return;
 				}
 
-				let fullText = '';
+				fullText = '';
 				let buffer = '';
 				const openaiToolCalls: Array<{ id: string; name: string; args: string }> = [];
 
@@ -282,6 +284,7 @@ export class LLMClient extends EventEmitter {
 		const transport = url.protocol === 'https:' ? https : http;
 
 		return new Promise((resolve, reject) => {
+			let fullText = '';
 			const req = transport.request({
 				hostname: url.hostname,
 				port: url.port,
@@ -296,7 +299,7 @@ export class LLMClient extends EventEmitter {
 					return;
 				}
 
-				let fullText = '';
+				fullText = '';
 				let buffer = '';
 				const ollamaToolCalls: Array<{ id: string; name: string; args: any }> = [];
 

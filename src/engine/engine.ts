@@ -74,6 +74,7 @@ export class SoulClawEngine extends EventEmitter {
 		}
 
 		this.setState('running');
+		let progressResolve: (() => void) | undefined;
 
 		try {
 			// Add user message to session
@@ -109,7 +110,7 @@ export class SoulClawEngine extends EventEmitter {
 				let allowedTools: string[] | undefined;
 				try {
 					const vscode = require('vscode');
-					allowedTools = vscode.workspace.getConfiguration('clawsouls').get<string[]>('allowedTools');
+					allowedTools = vscode.workspace.getConfiguration('clawsouls').get('allowedTools') as string[] | undefined;
 				} catch {}
 				
 				const allTools = getAnthropicTools();
@@ -126,7 +127,6 @@ export class SoulClawEngine extends EventEmitter {
 			const signal = this._abortController.signal;
 
 			// Progress notification
-			let progressResolve: (() => void) | undefined;
 			try {
 				const vscode = require('vscode');
 				vscode.window.withProgress(

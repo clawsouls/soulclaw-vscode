@@ -68,7 +68,7 @@ async function sendCodeAction(kind: CodeActionKind): Promise<void> {
 		return;
 	}
 
-	let prompt: string;
+	let prompt: string = '';
 	if (kind === 'ask') {
 		const input = await vscode.window.showInputBox({
 			placeHolder: 'Ask about this code...',
