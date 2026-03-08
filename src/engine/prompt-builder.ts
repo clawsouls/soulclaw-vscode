@@ -50,10 +50,9 @@ Use tools proactively when the user asks you to write, edit, fix, or analyze cod
 	sections.push(`## Memory Recall
 Before answering anything about prior work, decisions, dates, people, preferences, or todos: use the information available in your context. If you have memory files loaded, reference them directly.`);
 
-	// Silent replies
-	sections.push(`## Silent Replies
-When you have nothing to say, respond with ONLY: NO_REPLY
-It must be your ENTIRE message — nothing else.`);
+	// Conversation style
+	sections.push(`## Conversation Style
+Always respond to the user. Be helpful, concise, and friendly. If the user greets you, greet them back.`);
 
 	// Date/time
 	const now = new Date();

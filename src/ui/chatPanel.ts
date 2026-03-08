@@ -147,6 +147,13 @@ export class ChatPanel {
 				html,
 				time
 			});
+		} else {
+			// Panel not open — message saved but not displayed.
+			// When panel opens, updateWebviewContent() will render all saved messages.
+			try {
+				const vsc = require('vscode');
+				vsc.commands.executeCommand('setContext', 'clawsouls.unreadMessages', true);
+			} catch {}
 		}
 	}
 	
@@ -262,10 +269,15 @@ export class ChatPanel {
 
 		// Send directly to engine — streaming handled via engine events
 		try {
-			await this.engine.sendMessage(text);
-			// final event handler adds the assistant message
+			const response = await this.engine.sendMessage(text);
+			// final event handler adds the assistant message via 'final' event
+			// If somehow final event didn't fire, ensure message is shown
+			if (response && typeof response === 'string' && !this.messages.some(m => m.content === response)) {
+				this.addMessage('assistant', response);
+			}
 		} catch (err: any) {
-			// error event handler adds the error message
+			const errMsg = `❌ Error: ${err.message || 'Unknown error'}`;
+			this.addMessage('assistant', errMsg);
 		}
 	}
 	
