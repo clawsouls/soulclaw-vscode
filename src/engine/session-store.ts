@@ -54,6 +54,15 @@ export class SessionStore {
 		return fs.existsSync(this.sessionPath(sessionKey));
 	}
 
+	clearAll(): void {
+		try {
+			const files = fs.readdirSync(this.sessionsDir).filter(f => f.endsWith('.json'));
+			for (const f of files) {
+				fs.unlinkSync(path.join(this.sessionsDir, f));
+			}
+		} catch {}
+	}
+
 	listSessions(): string[] {
 		try {
 			return fs.readdirSync(this.sessionsDir)

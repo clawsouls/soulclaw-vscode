@@ -288,6 +288,14 @@ export class SoulClawEngine extends EventEmitter {
 		this.log('Engine disposed');
 	}
 
+	/** Clear all sessions (e.g. when soul changes) */
+	clearSessions(): void {
+		if (this.sessions) {
+			this.sessions.clearAll();
+		}
+		this.log('All sessions cleared');
+	}
+
 	private isDangerousCommand(cmd: string): boolean {
 		const dangerous = [
 			/\brm\s+-rf?\b/, /\brm\s+/, /\brmdir\b/,
