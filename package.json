@@ -2,7 +2,7 @@
   "name": "soulclaw-vscode",
   "displayName": "SoulClaw — Soul-Powered AI Agent",
   "description": "Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools",
-  "version": "0.6.0",
+  "version": "0.6.2",
   "publisher": "clawsouls",
   "icon": "media/icon.png",
   "engines": {
@@ -406,9 +406,18 @@
         },
         "clawsouls.allowedTools": {
           "type": "array",
-          "default": ["read_file", "write_file", "edit_file", "list_files", "run_command", "search_files"],
+          "default": [
+            "read_file",
+            "write_file",
+            "edit_file",
+            "list_files",
+            "run_command",
+            "search_files"
+          ],
           "description": "Tools the agent is allowed to use. Remove items to restrict.",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "clawsouls.codeLensEnabled": {
           "type": "boolean",

@@ -88,7 +88,7 @@ export class ChatPanel {
 	/** Post a message to webview, queuing if not ready yet */
 	private postToWebview(msg: any): void {
 		if (this.panel && this.webviewReady) {
-			this.postToWebview(msg);
+			this.panel.webview.postMessage(msg);
 		} else {
 			this.messageQueue.push(msg);
 		}
