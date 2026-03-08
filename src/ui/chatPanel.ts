@@ -265,22 +265,43 @@ export class ChatPanel {
 		}
 	}
 	
+	private pendingMessages: string[] = [];
+
 	private async sendMessageToAgent(text: string): Promise<void> {
-		log(`sendMessageToAgent: "${text.slice(0, 50)}" panel=${!!this.panel}`);
+		log(`sendMessageToAgent: "${text.slice(0, 50)}" panel=${!!this.panel} engineState=${this.engine.state}`);
+
+		// If engine is busy, queue the message
+		if (this.engine.state === 'running') {
+			this.pendingMessages.push(text);
+			this.addMessage('user', text);
+			return;
+		}
+
 		// Add user message to chat
 		this.addMessage('user', text);
 
-		// Send directly to engine — streaming handled via engine events
+		// Send directly to engine
 		try {
 			const response = await this.engine.sendMessage(text);
-			// final event handler adds the assistant message via 'final' event
-			// If somehow final event didn't fire, ensure message is shown
 			if (response && typeof response === 'string' && !this.messages.some(m => m.content === response)) {
 				this.addMessage('assistant', response);
 			}
 		} catch (err: any) {
 			const errMsg = `❌ Error: ${err.message || 'Unknown error'}`;
 			this.addMessage('assistant', errMsg);
+		}
+
+		// Process queued messages
+		while (this.pendingMessages.length > 0 && this.engine.state === 'ready') {
+			const next = this.pendingMessages.shift()!;
+			try {
+				const response = await this.engine.sendMessage(next);
+				if (response && typeof response === 'string' && !this.messages.some(m => m.content === response)) {
+					this.addMessage('assistant', response);
+				}
+			} catch (err: any) {
+				this.addMessage('assistant', `❌ Error: ${(err as Error).message || 'Unknown error'}`);
+			}
 		}
 	}
 	
@@ -556,7 +577,7 @@ export class ChatPanel {
 					});
 					
 					messageInput.addEventListener('keydown', (e) => {
-						if (e.key === 'Enter' && !e.shiftKey) {
+						if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
 							e.preventDefault();
 							sendMessage();
 						}
