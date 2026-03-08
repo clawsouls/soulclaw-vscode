@@ -136,7 +136,7 @@ export function executeTool(call: ToolCall, workspaceDir: string): ToolResult {
 				const output = results.map((r: any) => `[${r.file}:${r.line}] (score:${r.score.toFixed(2)}) ${r.text}`).join('\n');
 				return { success: true, output };
 			}
-		case 'search_files':
+			case 'search_files':
 				return searchFiles(call.args.pattern, resolvePath(call.args.path, workspaceDir), call.args.include);
 			default:
 				return { success: false, output: `Unknown tool: ${call.name}` };
@@ -191,9 +191,10 @@ function readFile(filePath: string): ToolResult {
 
 function writeFile(filePath: string, content: string): ToolResult {
 	// Scope check — don't write outside workspace
-	const home = process.env.HOME || '';
 	const resolved = path.resolve(filePath);
-	if (resolved.startsWith(path.join(home, '.ssh')) || resolved.startsWith('/etc') || resolved.startsWith('/usr')) {
+	const home = process.env.HOME || '';
+	const blockedPrefixes = [path.join(home, '.ssh'), '/etc', '/usr', '/System', '/Library'];
+	if (blockedPrefixes.some(p => resolved.startsWith(p))) {
 		return { success: false, output: `⚠️ Blocked: Cannot write to system directory "${filePath}".` };
 	}
 	fs.mkdirSync(path.dirname(filePath), { recursive: true });
