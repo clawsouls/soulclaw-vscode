@@ -306,7 +306,16 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 
 		try {
 			execSync(`git checkout "${node.branch.name}"`, { cwd: swarmDir, encoding: 'utf8' });
+			// Update swarm config for CLI compatibility
+			const configPath = require('path').join(swarmDir, '.soulscan', 'swarm.json');
+			try {
+				const config = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
+				config.agentBranch = node.branch.name;
+				require('fs').writeFileSync(configPath, JSON.stringify(config, null, 2));
+			} catch {}
 			vscode.window.showInformationMessage(`Switched to "${node.branch.name}".`);
+			// Update status bar agent name
+			try { await vscode.commands.executeCommand('clawsouls.refreshStatusBar'); } catch {}
 			this.refresh();
 		} catch (err: any) {
 			vscode.window.showErrorMessage(`Switch failed: ${err.message}`);

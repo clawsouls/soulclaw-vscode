@@ -195,8 +195,16 @@ export class StatusBarManager {
 	}
 	
 	private getCurrentAgentName(): string {
-		// For MVP, we'll just show a default agent name
-		// Later this will integrate with swarm branch detection
+		try {
+			const { getSwarmDir } = require('../paths');
+			const swarmDir = getSwarmDir();
+			const fs = require('fs');
+			if (fs.existsSync(require('path').join(swarmDir, '.git'))) {
+				const { execSync } = require('child_process');
+				const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: swarmDir, encoding: 'utf8' }).trim();
+				return branch || 'agent/main';
+			}
+		} catch {}
 		return 'agent/main';
 	}
 	
