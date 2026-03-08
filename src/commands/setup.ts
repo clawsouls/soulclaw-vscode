@@ -1081,3 +1081,40 @@ function getStep5CompleteHtml(): string {
 		</html>
 	`;
 }
+
+/** Standalone Telegram setup — accessible from Command Palette */
+export function setupTelegram(): void {
+	const panel = vscode.window.createWebviewPanel(
+		'clawsoulsTelegramSetup',
+		'SoulClaw — Telegram Setup',
+		vscode.ViewColumn.One,
+		{ enableScripts: true }
+	);
+
+	let html = getStep4TelegramHtml();
+	// Adjust UI for standalone mode
+	html = html.replace('Step 4 of 5: Get notifications via Telegram (optional)', 'Connect your Telegram bot');
+	panel.webview.html = html;
+
+	panel.webview.onDidReceiveMessage(async (message: any) => {
+		switch (message.type) {
+			case 'testTelegram':
+				try {
+					const result = await testTelegramConnection(message.data.botToken, message.data.chatId);
+					panel.webview.postMessage({ type: 'telegramTestResult', success: true, botName: result });
+				} catch (err: any) {
+					panel.webview.postMessage({ type: 'telegramTestResult', success: false, error: err.message });
+				}
+				break;
+			case 'saveTelegram':
+				await saveTelegramConfig(message.data.botToken, message.data.chatId);
+				vscode.window.showInformationMessage('✅ Telegram connected! Restart SoulClaw to activate.');
+				panel.dispose();
+				break;
+			case 'next':
+			case 'skip':
+				panel.dispose();
+				break;
+		}
+	});
+}

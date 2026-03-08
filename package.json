@@ -2,7 +2,7 @@
   "name": "soulclaw-vscode",
   "displayName": "SoulClaw — Soul-Powered AI Agent",
   "description": "Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools",
-  "version": "0.6.10",
+  "version": "0.6.11",
   "publisher": "clawsouls",
   "icon": "media/icon.png",
   "engines": {
@@ -72,6 +72,10 @@
       {
         "command": "clawsouls.setup",
         "title": "ClawSouls: Setup"
+      },
+      {
+        "command": "clawsouls.setupTelegram",
+        "title": "SoulClaw: Connect Telegram"
       },
       {
         "command": "clawsouls.openChat",
