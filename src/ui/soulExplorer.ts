@@ -228,44 +228,46 @@ ${scan}
 		if (confirm !== 'Apply') return;
 
 		try {
-			// Fetch full soul detail with file contents
-			const detail = await apiGet(`/souls/${soul.owner}/${soul.name}?files=true`);
+			// Fetch full bundle (all file contents in one request)
+			const bundle = await apiGet(`/bundle/${soul.owner}/${soul.name}`);
+			const bundleFiles: Record<string, string> = bundle.files || {};
+			const manifest = bundle.manifest || {};
 
 			const soulJson = {
-				name: detail.name,
-				displayName: detail.displayName,
-				description: detail.description,
-				version: detail.version,
+				name: manifest.name || soul.name,
+				displayName: manifest.displayName || soul.displayName,
+				description: manifest.description || soul.description,
+				version: manifest.version || soul.version,
 				specVersion: '0.5',
-				license: detail.license,
-				tags: detail.tags,
-				category: detail.category,
-				author: detail.author,
-				files: detail.files
+				license: manifest.license || soul.license,
+				tags: manifest.tags || soul.tags,
+				category: manifest.category || soul.category,
+				author: soul.author,
+				files: {} as Record<string, string>
 			};
 
-			// Map file contents: files array = filenames, fileContents = {index: content}
-			const fileNames = Array.isArray(detail.files) ? detail.files as string[] : [];
-			const fileContentsMap = detail.fileContents || {};
-
-			// Filename mapping: soul→SOUL.md, identity→IDENTITY.md, etc.
-			const fileNameMap: Record<string, string> = {
-				'soul': 'SOUL.md',
-				'identity': 'IDENTITY.md',
-				'style': 'STYLE.md',
-				'agents': 'AGENTS.md',
-				'readme': 'README.md',
-				'heartbeat': 'HEARTBEAT.md',
-				'user': 'USER.md',
-				'memory': 'MEMORY.md',
-				'tools': 'TOOLS.md',
-				'bootstrap': 'BOOTSTRAP.md',
-				'soul.json': 'soul.json',  // skip, we write our own
+			// Build files map from bundle filenames
+			const knownFiles: Record<string, string> = {
+				'SOUL.md': 'soul',
+				'IDENTITY.md': 'identity',
+				'STYLE.md': 'style',
+				'AGENTS.md': 'agents',
+				'README.md': 'readme',
+				'HEARTBEAT.md': 'heartbeat',
+				'USER.md': 'user',
+				'MEMORY.md': 'memory',
+				'TOOLS.md': 'tools',
+				'BOOTSTRAP.md': 'bootstrap',
 			};
+			for (const filename of Object.keys(bundleFiles)) {
+				if (filename === 'soul.json' || filename === 'LICENSE') continue;
+				const key = knownFiles[filename] || filename;
+				soulJson.files[key] = filename;
+			}
 
 			// Write to target directories
 			const soulFiles = ['soul.json', 'SOUL.md', 'IDENTITY.md', 'STYLE.md', 'AGENTS.md', 
-				'README.md', 'HEARTBEAT.md', 'USER.md', 'TOOLS.md', 'BOOTSTRAP.md'];
+				'README.md', 'HEARTBEAT.md', 'USER.md', 'TOOLS.md', 'BOOTSTRAP.md', 'LICENSE'];
 			for (const dir of targetDirs) {
 				fs.mkdirSync(dir, { recursive: true });
 
@@ -278,12 +280,10 @@ ${scan}
 				// Write soul.json
 				fs.writeFileSync(path.join(dir, 'soul.json'), JSON.stringify(soulJson, null, 2));
 
-				// Write file contents
-				for (let i = 0; i < fileNames.length; i++) {
-					const key = fileNames[i];
-					const content = fileContentsMap[String(i)];
-					if (!content || key === 'soul.json') continue;
-					const filename = fileNameMap[key] || `${key.toUpperCase()}.md`;
+				// Write all bundle files
+				for (const [filename, content] of Object.entries(bundleFiles)) {
+					if (filename === 'soul.json') continue; // already written
+					if (typeof content !== 'string') continue;
 					fs.writeFileSync(path.join(dir, filename), content);
 				}
 			}
