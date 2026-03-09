@@ -362,6 +362,22 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 	}
 
 	private async handleMergeConflicts(swarmDir: string, out?: any): Promise<void> {
+		// If no actual conflicts remain, auto-complete
+		if (this.conflictedFiles.length === 0 && this.mergeInProgress) {
+			try {
+				execSync('git add -A', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+				execSync(`git commit -m "swarm merge: ${this.mergeBranchName} (resolved)" --no-verify`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+				const branch = this.getCurrentBranch();
+				if (branch) {
+					try { execSync(`git push origin "${branch}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }); } catch {}
+				}
+				this.mergeInProgress = false;
+				vscode.window.showInformationMessage('✅ Merge complete!');
+				this.refresh();
+				return;
+			} catch {}
+		}
+
 		const action = await vscode.window.showQuickPick(
 			[
 				{ label: '🤖 LLM Resolve', description: 'Auto-resolve with Ollama', value: 'llm' },
@@ -442,8 +458,19 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			{ location: vscode.ProgressLocation.Notification, title: 'LLM Merge', cancellable: false },
 			async (progress) => {
 				let resolved = 0;
-				for (const f of this.conflictedFiles) {
-					progress.report({ message: `Resolving ${f}...`, increment: 100 / this.conflictedFiles.length });
+				const contentFiles = this.conflictedFiles.filter(f => 
+					!f.endsWith('.age') && !f.includes('.soulscan/') && f !== 'soul.json' && f !== 'README.md'
+				);
+				// Auto-resolve remaining non-content files
+				for (const f of this.conflictedFiles.filter(ff => !contentFiles.includes(ff))) {
+					try {
+						execSync(`git checkout --ours "${f}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+						execSync(`git add "${f}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+						resolved++;
+					} catch {}
+				}
+				for (const f of contentFiles) {
+					progress.report({ message: `Resolving ${f}...`, increment: 100 / Math.max(contentFiles.length, 1) });
 
 					const filePath = path.join(swarmDir, f);
 					const content = fs.readFileSync(filePath, 'utf8');
