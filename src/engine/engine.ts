@@ -154,17 +154,21 @@ export class SoulClawEngine extends EventEmitter {
 			const signal = this._abortController.signal;
 
 			// Progress notification
+			let progressReport: ((msg: { message?: string }) => void) | undefined;
 			try {
 				const vscode = require('vscode');
 				vscode.window.withProgress(
-					{ location: vscode.ProgressLocation.Notification, title: '🔮 SoulClaw thinking...', cancellable: true },
-					(_progress: any, token: any) => {
+					{ location: vscode.ProgressLocation.Notification, title: '🔮 SoulClaw', cancellable: true },
+					(progress: any, token: any) => {
+						progressReport = (msg: { message?: string }) => progress.report(msg);
+						progressReport({ message: 'Thinking...' });
 						token.onCancellationRequested(() => this.abort());
 						return new Promise<void>(resolve => { progressResolve = resolve; });
 					}
 				);
 			} catch {}
 
+			let totalToolCalls = 0;
 			for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
 				if (signal.aborted) { finalText = '⏹️ Stopped.'; break; }
 
@@ -182,8 +186,12 @@ export class SoulClawEngine extends EventEmitter {
 					for (const tc of response.toolCalls) {
 						if (signal.aborted) break;
 
+						totalToolCalls++;
 						this.log(`Tool call: ${tc.name}(${JSON.stringify(tc.args).slice(0, 200)})`);
 						this.emit('toolCall', { name: tc.name, args: tc.args });
+						if (progressReport) {
+							progressReport({ message: `Running ${tc.name}... (${totalToolCalls})` });
+						}
 
 						// Check for dangerous commands
 						if (tc.name === 'run_command' && this.isDangerousCommand(tc.args.command)) {
@@ -248,6 +256,14 @@ export class SoulClawEngine extends EventEmitter {
 
 			this._abortController = null;
 			if (progressResolve) progressResolve();
+
+			// Notify on long task completion (3+ tool calls)
+			if (totalToolCalls >= 3) {
+				try {
+					const vscode = require('vscode');
+					vscode.window.showInformationMessage(`✅ SoulClaw completed task (${totalToolCalls} tool calls)`);
+				} catch {}
+			}
 
 			// Estimate token usage (rough: 1 token ≈ 4 chars)
 			const inputTokens = llmMessages.reduce((sum, m) => sum + (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content).length), 0) / 4;

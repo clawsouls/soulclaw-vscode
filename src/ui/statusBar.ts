@@ -5,6 +5,7 @@ type ConnectionState = string;
 
 export class StatusBarManager {
 	private chatItem: vscode.StatusBarItem;
+	private modelItem: vscode.StatusBarItem;
 	private soulStatusItem: vscode.StatusBarItem;
 	private agentStatusItem: vscode.StatusBarItem;
 	private connectionStatusItem: vscode.StatusBarItem;
@@ -18,6 +19,7 @@ export class StatusBarManager {
 	) {
 		// Create status bar items
 		this.chatItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 101);
+		this.modelItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100.5);
 		this.soulStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
 		this.agentStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
 		this.connectionStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
@@ -48,6 +50,7 @@ export class StatusBarManager {
 		
 		context.subscriptions.push(
 			this.chatItem,
+			this.modelItem,
 			this.soulStatusItem,
 			this.agentStatusItem,
 			this.connectionStatusItem,
@@ -55,7 +58,8 @@ export class StatusBarManager {
 			this.restartItem,
 			this.setupItem,
 			soulWatcher,
-			vscode.commands.registerCommand('clawsouls.refreshStatusBar', () => this.refreshSoulName())
+			vscode.commands.registerCommand('clawsouls.refreshStatusBar', () => this.refreshSoulName()),
+			vscode.commands.registerCommand('clawsouls.selectModel', () => this.selectModel())
 		);
 	}
 	
@@ -64,6 +68,11 @@ export class StatusBarManager {
 		this.chatItem.text = '💬 Chat';
 		this.chatItem.command = 'clawsouls.openChat';
 		this.chatItem.tooltip = 'Open ClawSouls Chat';
+
+		// Model selector
+		this.modelItem.command = 'clawsouls.selectModel';
+		this.modelItem.tooltip = 'Click to change LLM model';
+		this.updateModelStatus();
 
 		// Soul status — click to show Soul Explorer
 		this.soulStatusItem.command = 'clawsouls.soulExplorer.focus';
@@ -93,6 +102,7 @@ export class StatusBarManager {
 		const config = vscode.workspace.getConfiguration('clawsouls');
 		if (config.get('showStatusBar', true)) {
 			this.chatItem.show();
+			this.modelItem.show();
 			this.soulStatusItem.show();
 			this.agentStatusItem.show();
 			this.connectionStatusItem.show();
@@ -232,6 +242,94 @@ export class StatusBarManager {
 		}
 	}
 
+	private getCurrentModelDisplay(): string {
+		const config = vscode.workspace.getConfiguration('clawsouls');
+		const provider = config.get<string>('llmProvider', 'anthropic');
+		const model = config.get<string>('llmModel', '');
+		if (model) {
+			return model;
+		}
+		// Provider defaults
+		switch (provider) {
+			case 'anthropic': return 'claude-sonnet-4-20250514';
+			case 'openai': return 'gpt-4o';
+			case 'ollama': return config.get<string>('ollamaModel', 'llama3');
+			default: return 'unknown';
+		}
+	}
+
+	public updateModelStatus(): void {
+		const model = this.getCurrentModelDisplay();
+		// Shorten for display
+		const short = model
+			.replace('claude-sonnet-4-20250514', 'claude-sonnet-4')
+			.replace('claude-opus-4-6', 'claude-opus-4')
+			.replace('claude-haiku-3', 'claude-haiku-3')
+			.replace('gpt-4o-mini', 'gpt-4o-mini');
+		this.modelItem.text = `$(symbol-misc) ${short}`;
+	}
+
+	public async selectModel(): Promise<void> {
+		const config = vscode.workspace.getConfiguration('clawsouls');
+		const provider = config.get<string>('llmProvider', 'anthropic');
+		const currentModel = this.getCurrentModelDisplay();
+
+		const modelsByProvider: Record<string, { label: string; description?: string }[]> = {
+			anthropic: [
+				{ label: 'claude-sonnet-4-20250514', description: 'Balanced speed & quality' },
+				{ label: 'claude-opus-4-6', description: 'Most capable' },
+				{ label: 'claude-haiku-3', description: 'Fastest' },
+			],
+			openai: [
+				{ label: 'gpt-4o', description: 'Most capable' },
+				{ label: 'gpt-4o-mini', description: 'Fast & affordable' },
+				{ label: 'o1', description: 'Reasoning model' },
+			],
+			ollama: [
+				{ label: config.get<string>('ollamaModel', 'llama3'), description: 'Current Ollama model' },
+			],
+		};
+
+		const models = modelsByProvider[provider] || [];
+		// Mark current
+		const items = models.map(m => ({
+			label: m.label === currentModel ? `$(check) ${m.label}` : m.label,
+			description: m.description,
+			modelId: m.label,
+		}));
+
+		// Add option to switch provider
+		items.push({ label: '', description: '', modelId: '' }); // separator hack
+		items.push({ label: '$(gear) Change Provider...', description: `Current: ${provider}`, modelId: '__switch_provider__' });
+
+		const pick = await vscode.window.showQuickPick(items, {
+			placeHolder: `Select model (provider: ${provider})`,
+		});
+
+		if (!pick || !pick.modelId) { return; }
+
+		if (pick.modelId === '__switch_provider__') {
+			const providerPick = await vscode.window.showQuickPick(
+				['anthropic', 'openai', 'ollama'].map(p => ({
+					label: p === provider ? `$(check) ${p}` : p,
+					providerId: p,
+				})),
+				{ placeHolder: 'Select LLM provider' }
+			);
+			if (providerPick) {
+				await config.update('llmProvider', providerPick.providerId, vscode.ConfigurationTarget.Global);
+				await config.update('llmModel', '', vscode.ConfigurationTarget.Global);
+				this.updateModelStatus();
+				vscode.commands.executeCommand('clawsouls.restartGateway');
+			}
+			return;
+		}
+
+		await config.update('llmModel', pick.modelId, vscode.ConfigurationTarget.Global);
+		this.updateModelStatus();
+		vscode.commands.executeCommand('clawsouls.restartGateway');
+	}
+
 	public updateSoulName(name: string): void {
 		this.soulStatusItem.text = `🔮 ${name}`;
 	}
@@ -241,6 +339,7 @@ export class StatusBarManager {
 	}
 	
 	public dispose(): void {
+		this.modelItem.dispose();
 		this.soulStatusItem.dispose();
 		this.agentStatusItem.dispose();
 		this.connectionStatusItem.dispose();

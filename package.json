@@ -125,6 +125,10 @@
 				"title": "ClawSouls: Clear Chat"
 			},
 			{
+				"command": "clawsouls.selectModel",
+				"title": "ClawSouls: Select Model"
+			},
+			{
 				"command": "clawsouls.openChatHistory",
 				"title": "Open Chat History"
 			},
@@ -240,6 +244,10 @@
 			{
 				"command": "soulclaw.stopGeneration",
 				"title": "SoulClaw: Stop Generation"
+			},
+			{
+				"command": "clawsouls.publishSoul",
+				"title": "ClawSouls: Publish Soul"
 			}
 		],
 		"menus": {
@@ -440,9 +448,17 @@
 						"run_command",
 						"search_files"
 					],
-					"description": "Tools the agent is allowed to use. Remove items to restrict.",
+					"description": "Tools the agent is allowed to use. Remove items to restrict agent capabilities. Available tools: read_file, write_file, edit_file, list_files, run_command, search_files. For example, remove 'run_command' to prevent shell execution.",
 					"items": {
-						"type": "string"
+						"type": "string",
+						"enum": [
+							"read_file",
+							"write_file",
+							"edit_file",
+							"list_files",
+							"run_command",
+							"search_files"
+						]
 					}
 				},
 				"clawsouls.codeLensEnabled": {

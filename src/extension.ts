@@ -11,6 +11,7 @@ import { ChatHistoryProvider } from './ui/chatHistoryPanel';
 import { SoulScanProvider } from './ui/soulscanPanel';
 import { setupWizard } from './commands/setup';
 import { registerCodeActions } from './commands/codeActions';
+import { publishSoul } from './commands/publish';
 import { SoulClawCodeLensProvider } from './providers/codeLensProvider';
 import { initStateDir, getStateDir, getWorkspaceDir } from './paths';
 import { TelegramRelay } from './integrations/telegram';
@@ -44,6 +45,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('clawsouls.loadHistory', (key: string, wsName: string) => chatPanel?.loadHistory(key, wsName)),
 		vscode.commands.registerCommand('clawsouls.clearSessions', () => engine?.clearSessions()),
 		vscode.commands.registerCommand('clawsouls.setupTelegram', () => setupTelegram()),
+		vscode.commands.registerCommand('clawsouls.publishSoul', () => publishSoul(context)),
 		vscode.commands.registerCommand('clawsouls.switchHistory', () => chatPanel?.switchHistory()),
 		vscode.commands.registerCommand('clawsouls.restartGateway', () => restartEngine()),
 		vscode.commands.registerCommand('clawsouls.connect', () => restartEngine()),
