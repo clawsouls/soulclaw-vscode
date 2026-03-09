@@ -418,25 +418,37 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 	/** Sync workspace memory files → swarm branch (before push) */
 	private syncWorkspaceToSwarm(swarmDir: string, out?: any): void {
 		const { getWorkspaceDir } = require('../paths');
-		const workspaceDir = getWorkspaceDir();
+		const internalWorkspace = getWorkspaceDir();
 
-		// Copy MEMORY.md to swarm
-		const wsMemory = path.join(workspaceDir, 'MEMORY.md');
-		const swarmMemory = path.join(swarmDir, 'MEMORY.md');
-		if (fs.existsSync(wsMemory)) {
-			fs.copyFileSync(wsMemory, swarmMemory);
+		// Collect source dirs: internal workspace + VSCode workspace
+		const sourceDirs: string[] = [internalWorkspace];
+		const vsWorkspaces = vscode.workspace.workspaceFolders;
+		if (vsWorkspaces && vsWorkspaces.length > 0) {
+			const vsDir = vsWorkspaces[0].uri.fsPath;
+			if (vsDir !== internalWorkspace) sourceDirs.push(vsDir);
 		}
 
-		// Copy memory/ to swarm
-		const wsMemoryDir = path.join(workspaceDir, 'memory');
-		const swarmMemoryDir = path.join(swarmDir, 'memory');
-		if (fs.existsSync(wsMemoryDir)) {
-			fs.mkdirSync(swarmMemoryDir, { recursive: true });
-			for (const entry of fs.readdirSync(wsMemoryDir)) {
-				const src = path.join(wsMemoryDir, entry);
-				if (fs.statSync(src).isFile()) {
-					fs.copyFileSync(src, path.join(swarmMemoryDir, entry));
+		for (const workspaceDir of sourceDirs) {
+			// Copy MEMORY.md to swarm
+			const wsMemory = path.join(workspaceDir, 'MEMORY.md');
+			const swarmMemory = path.join(swarmDir, 'MEMORY.md');
+			if (fs.existsSync(wsMemory)) {
+				fs.copyFileSync(wsMemory, swarmMemory);
+				out?.appendLine(`[Swarm] copied MEMORY.md from ${workspaceDir}`);
+			}
+
+			// Copy memory/ to swarm
+			const wsMemoryDir = path.join(workspaceDir, 'memory');
+			const swarmMemoryDir = path.join(swarmDir, 'memory');
+			if (fs.existsSync(wsMemoryDir)) {
+				fs.mkdirSync(swarmMemoryDir, { recursive: true });
+				for (const entry of fs.readdirSync(wsMemoryDir)) {
+					const src = path.join(wsMemoryDir, entry);
+					if (fs.statSync(src).isFile()) {
+						fs.copyFileSync(src, path.join(swarmMemoryDir, entry));
+					}
 				}
+				out?.appendLine(`[Swarm] copied memory/ from ${workspaceDir}`);
 			}
 		}
 
