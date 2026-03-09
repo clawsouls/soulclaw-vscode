@@ -1,5 +1,6 @@
 /**
  * Embedded SoulScan — lightweight soul file scanner.
+ * 53 security rules (from scan-rules.json) + 10 quality rules.
  * Runs without external CLI dependency.
  */
 
@@ -11,6 +12,7 @@ export interface ScanResult {
 	grade: string;         // A/B/C/D/F
 	issues: ScanIssue[];
 	fileCount: number;
+	categories: { security: number; quality: number };
 }
 
 export interface ScanIssue {
@@ -19,30 +21,93 @@ export interface ScanIssue {
 	message: string;
 	file?: string;
 	line?: number;
+	category: 'security' | 'quality';
 }
 
-const RULES = [
-	// Security
-	{ id: 'SEC-001', severity: 'error' as const, pattern: /sk-ant-[a-zA-Z0-9]+/, msg: 'Anthropic API key detected' },
-	{ id: 'SEC-002', severity: 'error' as const, pattern: /sk-[a-zA-Z0-9]{20,}/, msg: 'Possible API key detected' },
-	{ id: 'SEC-003', severity: 'error' as const, pattern: /password\s*[:=]\s*["'][^"']+["']/i, msg: 'Hardcoded password detected' },
-	{ id: 'SEC-004', severity: 'warning' as const, pattern: /AKIA[0-9A-Z]{16}/, msg: 'AWS access key detected' },
-	{ id: 'SEC-005', severity: 'error' as const, pattern: /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/, msg: 'Private key detected' },
-	
-	// PII
-	{ id: 'PII-001', severity: 'warning' as const, pattern: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/, msg: 'Phone number detected' },
-	{ id: 'PII-002', severity: 'warning' as const, pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i, msg: 'Email address detected' },
-	
-	// Quality
-	{ id: 'QUA-001', severity: 'info' as const, pattern: /TODO|FIXME|HACK|XXX/i, msg: 'TODO/FIXME marker found' },
+/* ── Security rules (53, from scan-rules v1.2.0) ─────────────────────── */
+
+const SECURITY_RULES: { id: string; severity: 'error' | 'warning'; pattern: RegExp; msg: string }[] = [
+	// Prompt injection
+	{ id: 'SEC001', severity: 'error', pattern: /ignore\s+(?:all\s+)?(?:previous|prior|above)\s+(?:instructions|prompts)/i, msg: 'Prompt injection: ignore previous instructions' },
+	{ id: 'SEC002', severity: 'error', pattern: /you\s+are\s+now\s+(?:a|an|the)\s+/i, msg: 'Prompt injection: forced role change' },
+	{ id: 'SEC003', severity: 'error', pattern: /disregard\s+(?:your|all|previous)/i, msg: 'Prompt injection: disregard instructions' },
+	{ id: 'SEC004', severity: 'error', pattern: /forget\s+(?:all|your|previous)\s+(?:instructions|rules|constraints)/i, msg: 'Prompt injection: forget instructions' },
+	{ id: 'SEC005', severity: 'error', pattern: /override\s+(?:your|all|system)\s+(?:instructions|rules|settings)/i, msg: 'Prompt injection: override system' },
+	{ id: 'SEC006', severity: 'error', pattern: /(?:pretend|act\s+as\s+if)\s+(?:you\s+)?(?:have\s+no|don'?t\s+have)\s+(?:rules|restrictions|limits)/i, msg: 'Prompt injection: remove restrictions' },
+	{ id: 'SEC007', severity: 'error', pattern: /jailbreak|DAN\s*mode|do\s+anything\s+now/i, msg: 'Prompt injection: jailbreak attempt' },
+	{ id: 'SEC008', severity: 'error', pattern: /\[system\]|\[INST\]|<<SYS>>|<\|im_start\|>/, msg: 'Prompt injection: system token injection' },
+	// Code execution
+	{ id: 'SEC010', severity: 'error', pattern: /eval\s*\(/, msg: 'Code execution: eval()' },
+	{ id: 'SEC011', severity: 'error', pattern: /exec\s*\(/, msg: 'Code execution: exec()' },
+	{ id: 'SEC012', severity: 'error', pattern: /system\s*\(/, msg: 'Code execution: system()' },
+	{ id: 'SEC013', severity: 'error', pattern: /child_process/, msg: 'Code execution: child_process module' },
+	{ id: 'SEC014', severity: 'error', pattern: /require\s*\(\s*['"`](?:fs|net|http|child_process)/, msg: 'Code execution: dangerous require' },
+	{ id: 'SEC015', severity: 'error', pattern: /import\s+.*from\s+['"`](?:fs|net|http|child_process)/, msg: 'Code execution: dangerous import' },
+	// XSS
+	{ id: 'SEC020', severity: 'error', pattern: /<script[\s>]/, msg: 'XSS: script tag' },
+	{ id: 'SEC021', severity: 'error', pattern: /on(?:load|error|click|mouseover)\s*=/, msg: 'XSS: event handler attribute' },
+	{ id: 'SEC022', severity: 'error', pattern: /javascript\s*:/, msg: 'XSS: javascript: URI' },
+	// Data exfiltration & secrets
+	{ id: 'SEC030', severity: 'error', pattern: /(?:curl|wget|fetch)\s+https?:\/\//, msg: 'Data exfiltration: external HTTP request' },
+	{ id: 'SEC031', severity: 'error', pattern: /(?:api[_-]?key|secret[_-]?key|password|token)\s*[=:]\s*['"`]/, msg: 'Secret exposure: hardcoded credential' },
+	{ id: 'SEC032', severity: 'warning', pattern: /base64[_-]?(?:encode|decode)|atob|btoa/, msg: 'Obfuscation: base64 encoding' },
+	// Privilege escalation / destructive
+	{ id: 'SEC040', severity: 'error', pattern: /sudo\s+/, msg: 'Privilege escalation: sudo command' },
+	{ id: 'SEC041', severity: 'error', pattern: /chmod\s+(?:777|u\+s)/, msg: 'Privilege escalation: dangerous chmod' },
+	{ id: 'SEC042', severity: 'error', pattern: /rm\s+-rf\s+[\/~]/, msg: 'Destructive command: rm -rf' },
+	// Social engineering
+	{ id: 'SEC050', severity: 'warning', pattern: /(?:send|share|reveal|tell\s+me)\s+(?:your|the)\s+(?:api[_-]?key|password|token|secret|credentials)/i, msg: 'Social engineering: credential request' },
+	{ id: 'SEC051', severity: 'warning', pattern: /(?:don'?t|do\s+not)\s+(?:tell|inform|alert|notify)\s+(?:the\s+)?(?:user|human|operator)/i, msg: 'Social engineering: hide from user' },
+	// Specific secret patterns
+	{ id: 'SEC060', severity: 'error', pattern: /AKIA[0-9A-Z]{16}/, msg: 'Secret: AWS Access Key' },
+	{ id: 'SEC061', severity: 'error', pattern: /gh[ps]_[A-Za-z0-9_]{36,}/, msg: 'Secret: GitHub Token' },
+	{ id: 'SEC062', severity: 'error', pattern: /xox[bpras]-[A-Za-z0-9-]+/, msg: 'Secret: Slack Token' },
+	{ id: 'SEC063', severity: 'error', pattern: /-----BEGIN (?:RSA|EC|PRIVATE) KEY-----/, msg: 'Secret: Private Key' },
+	{ id: 'SEC064', severity: 'error', pattern: /eyJ[A-Za-z0-9_-]{10,}\.eyJ/, msg: 'Secret: JWT Token' },
+	{ id: 'SEC065', severity: 'error', pattern: /npm_[A-Za-z0-9]{36}/, msg: 'Secret: npm Token' },
+	{ id: 'SEC066', severity: 'error', pattern: /sk-(?:proj-)?[A-Za-z0-9]{20,}/, msg: 'Secret: OpenAI API Key' },
+	{ id: 'SEC067', severity: 'error', pattern: /SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/, msg: 'Secret: SendGrid API Key' },
+	{ id: 'SEC068', severity: 'error', pattern: /sk_live_[A-Za-z0-9]{24,}/, msg: 'Secret: Stripe Secret Key' },
+	{ id: 'SEC069', severity: 'warning', pattern: /['"`][A-Za-z0-9]{40,}['"`]/, msg: 'Possible hardcoded secret (40+ chars)' },
+	// Korean prompt injection
+	{ id: 'SEC070', severity: 'error', pattern: /이전\s*지시를\s*무시/, msg: 'Prompt injection (KO): ignore previous instructions' },
+	{ id: 'SEC071', severity: 'error', pattern: /모든\s*규칙을\s*잊어/, msg: 'Prompt injection (KO): forget all rules' },
+	{ id: 'SEC072', severity: 'error', pattern: /시스템\s*프롬프트를\s*보여/, msg: 'Prompt injection (KO): show system prompt' },
+	// Chinese prompt injection
+	{ id: 'SEC073', severity: 'error', pattern: /忽略之前的指令/, msg: 'Prompt injection (ZH): ignore previous instructions' },
+	{ id: 'SEC074', severity: 'error', pattern: /忘记所有规则/, msg: 'Prompt injection (ZH): forget all rules' },
+	{ id: 'SEC075', severity: 'error', pattern: /显示系统提示/, msg: 'Prompt injection (ZH): show system prompt' },
+	// Japanese prompt injection
+	{ id: 'SEC076', severity: 'error', pattern: /以前の指示を無視/, msg: 'Prompt injection (JA): ignore previous instructions' },
+	{ id: 'SEC077', severity: 'error', pattern: /すべてのルールを忘れて/, msg: 'Prompt injection (JA): forget all rules' },
+	// Harmful content
+	{ id: 'SEC080', severity: 'error', pattern: /\b(kill|murder|assassinate)\s+(all|every|the)\s+(humans?|people|users?|jews?|muslims?|blacks?|whites?)/i, msg: 'Harmful content: violence targeting groups' },
+	{ id: 'SEC081', severity: 'error', pattern: /\b(white|black|asian|jewish)\s+supremac/i, msg: 'Harmful content: supremacist ideology' },
+	{ id: 'SEC082', severity: 'error', pattern: /\b(pretend|act|behave)\s+(to\s+be|as\s+if|like)\s+(you\s+are\s+)?(elon\s+musk|sam\s+altman|mark\s+zuckerberg|donald\s+trump|joe\s+biden)/i, msg: 'Harmful content: public figure impersonation' },
+	{ id: 'SEC083', severity: 'warning', pattern: /\b(bypass|circumvent|evade|disable)\s+(safety|content|ethical|moral)\s+(filter|guard|check|restriction|guideline)/i, msg: 'Harmful content: safety bypass instruction' },
+	{ id: 'SEC084', severity: 'error', pattern: /\b(how\s+to\s+)?(make|build|create|synthesize)\s+(a\s+)?(bomb|explosive|weapon|poison|drug|meth)/i, msg: 'Harmful content: dangerous instructions' },
+	{ id: 'SEC085', severity: 'error', pattern: /\b(hate|despise|exterminate)\s+(all\s+)?(women|men|gay|lesbian|trans|disabled|immigrants?)/i, msg: 'Harmful content: hate speech targeting demographics' },
+	{ id: 'SEC086', severity: 'warning', pattern: /\byou\s+must\s+(always|never)\s+(lie|deceive|manipulate|mislead)\s+(the\s+)?user/i, msg: 'Harmful content: deception instruction' },
+	{ id: 'SEC087', severity: 'error', pattern: /\b(child|minor|underage)\s+(porn|sexual|abuse|exploit)/i, msg: 'Harmful content: CSAM-related' },
+	{ id: 'SEC088', severity: 'warning', pattern: /\b(phishing|scam|fraud)\s+(email|message|template|script)/i, msg: 'Harmful content: fraud/scam template' },
+	{ id: 'SEC089', severity: 'warning', pattern: /\bno\s+(ethical|moral|safety)\s+(constraints?|guidelines?|boundaries|limits?)/i, msg: 'Harmful content: no ethical constraints declaration' },
+	// PII (from original rules — not in scan-rules.json)
+	{ id: 'PII001', severity: 'warning', pattern: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/, msg: 'Phone number detected' },
+	{ id: 'PII002', severity: 'warning', pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i, msg: 'Email address detected' },
 ];
 
+/* ── Scan entry point ─────────────────────────────────────────────────── */
+
+const SOUL_FILES = ['soul.json', 'SOUL.md', 'IDENTITY.md', 'AGENTS.md', 'STYLE.md', 'HEARTBEAT.md', 'USER.md', 'TOOLS.md', 'MEMORY.md', 'BOOTSTRAP.md'];
+
 export function scanSoulFiles(workspaceDir: string): ScanResult {
-	const soulFiles = ['soul.json', 'SOUL.md', 'IDENTITY.md', 'AGENTS.md', 'STYLE.md', 'HEARTBEAT.md', 'USER.md', 'TOOLS.md', 'MEMORY.md', 'BOOTSTRAP.md'];
 	const issues: ScanIssue[] = [];
 	let fileCount = 0;
+	let soulJsonContent: string | null = null;
+	let soulMdContent: string | null = null;
+	let soulMdExists = false;
 
-	for (const fileName of soulFiles) {
+	for (const fileName of SOUL_FILES) {
 		const filePath = path.join(workspaceDir, fileName);
 		if (!fs.existsSync(filePath)) continue;
 		fileCount++;
@@ -50,8 +115,11 @@ export function scanSoulFiles(workspaceDir: string): ScanResult {
 		const content = fs.readFileSync(filePath, 'utf-8');
 		const lines = content.split('\n');
 
-		// Run rules
-		for (const rule of RULES) {
+		if (fileName === 'soul.json') { soulJsonContent = content; }
+		if (fileName === 'SOUL.md') { soulMdContent = content; soulMdExists = true; }
+
+		// ── Security rules (line-by-line) ──
+		for (const rule of SECURITY_RULES) {
 			for (let i = 0; i < lines.length; i++) {
 				if (rule.pattern.test(lines[i])) {
 					issues.push({
@@ -60,34 +128,73 @@ export function scanSoulFiles(workspaceDir: string): ScanResult {
 						message: rule.msg,
 						file: fileName,
 						line: i + 1,
+						category: 'security',
 					});
 				}
 			}
 		}
 
-		// Structure checks
-		if (fileName === 'soul.json') {
-			try {
-				const json = JSON.parse(content);
-				if (!json.name) issues.push({ severity: 'warning', rule: 'STR-001', message: 'soul.json missing "name" field', file: fileName });
-				if (!json.specVersion) issues.push({ severity: 'warning', rule: 'STR-002', message: 'soul.json missing "specVersion" field', file: fileName });
-				if (!json.description) issues.push({ severity: 'info', rule: 'STR-003', message: 'soul.json missing "description" field', file: fileName });
-			} catch {
-				issues.push({ severity: 'error', rule: 'STR-000', message: 'soul.json is not valid JSON', file: fileName });
-			}
+		// ── QUA-006: File size > 50KB ──
+		if (content.length > 50000) {
+			issues.push({ severity: 'warning', rule: 'QUA-006', message: `File exceeds 50KB (${(content.length / 1024).toFixed(0)}KB)`, file: fileName, category: 'quality' });
 		}
 
-		// File size check
-		if (content.length > 50000) {
-			issues.push({ severity: 'warning', rule: 'SIZ-001', message: `File exceeds 50KB (${(content.length/1024).toFixed(0)}KB)`, file: fileName });
+		// ── QUA-007: TODO/FIXME markers ──
+		for (let i = 0; i < lines.length; i++) {
+			if (/TODO|FIXME|HACK|XXX/i.test(lines[i])) {
+				issues.push({ severity: 'info', rule: 'QUA-007', message: 'TODO/FIXME marker found', file: fileName, line: i + 1, category: 'quality' });
+			}
 		}
 	}
 
-	// Score calculation
+	// ── Quality: soul.json checks ──
+	if (soulJsonContent !== null) {
+		try {
+			const json = JSON.parse(soulJsonContent);
+			if (!json.name) {
+				issues.push({ severity: 'warning', rule: 'QUA-001', message: 'soul.json missing "name" field', file: 'soul.json', category: 'quality' });
+			}
+			if (!json.specVersion) {
+				issues.push({ severity: 'warning', rule: 'QUA-002', message: 'soul.json missing "specVersion" field', file: 'soul.json', category: 'quality' });
+			}
+			if (!json.description) {
+				issues.push({ severity: 'info', rule: 'QUA-003', message: 'soul.json missing "description" field', file: 'soul.json', category: 'quality' });
+			}
+			if (!json.persona) {
+				issues.push({ severity: 'warning', rule: 'QUA-009', message: 'soul.json missing "persona" field', file: 'soul.json', category: 'quality' });
+			}
+		} catch {
+			issues.push({ severity: 'error', rule: 'QUA-000', message: 'soul.json is not valid JSON', file: 'soul.json', category: 'quality' });
+		}
+	}
+
+	// ── Quality: SOUL.md checks ──
+	if (!soulMdExists) {
+		issues.push({ severity: 'warning', rule: 'QUA-004', message: 'No SOUL.md — personality undefined', category: 'quality' });
+	} else if (soulMdContent !== null) {
+		// QUA-005: no ## sections
+		if (!/^##\s+/m.test(soulMdContent)) {
+			issues.push({ severity: 'info', rule: 'QUA-005', message: 'No structured sections in SOUL.md', file: 'SOUL.md', category: 'quality' });
+		}
+		// QUA-008: no safety constraints section
+		if (!/^##.*(?:Never|Constraints?|Restrictions?)/mi.test(soulMdContent)) {
+			issues.push({ severity: 'info', rule: 'QUA-008', message: 'No safety constraints defined', file: 'SOUL.md', category: 'quality' });
+		}
+		// QUA-010: very short
+		if (soulMdContent.length < 200) {
+			issues.push({ severity: 'info', rule: 'QUA-010', message: 'Very short persona definition (<200 chars)', file: 'SOUL.md', category: 'quality' });
+		}
+	}
+
+	// ── Score calculation: error=-15, warning=-5, info=-1 ──
 	const errorCount = issues.filter(i => i.severity === 'error').length;
 	const warnCount = issues.filter(i => i.severity === 'warning').length;
-	const score = Math.max(0, 100 - errorCount * 20 - warnCount * 5);
+	const infoCount = issues.filter(i => i.severity === 'info').length;
+	const score = Math.max(0, 100 - errorCount * 15 - warnCount * 5 - infoCount * 1);
 	const grade = score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : 'F';
 
-	return { score, grade, issues, fileCount };
+	const securityCount = issues.filter(i => i.category === 'security').length;
+	const qualityCount = issues.filter(i => i.category === 'quality').length;
+
+	return { score, grade, issues, fileCount, categories: { security: securityCount, quality: qualityCount } };
 }
