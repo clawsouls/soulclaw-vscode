@@ -1,484 +1,495 @@
 {
-  "name": "soulclaw-vscode",
-  "displayName": "SoulClaw — Soul-Powered AI Agent",
-  "description": "Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools",
-  "version": "0.6.39",
-  "publisher": "clawsouls",
-  "icon": "media/icon.png",
-  "engines": {
-    "vscode": "^1.85.0"
-  },
-  "categories": [
-    "AI",
-    "Chat",
-    "Machine Learning"
-  ],
-  "keywords": [
-    "ai",
-    "agent",
-    "soul",
-    "persona",
-    "swarm",
-    "memory",
-    "collaboration",
-    "openclaw",
-    "team",
-    "chat"
-  ],
-  "activationEvents": [
-    "onStartupFinished",
-    "onView:clawsouls.soulExplorer",
-    "onView:clawsouls.swarm",
-    "onView:clawsouls.checkpoints",
-    "onCommand:clawsouls.setup",
-    "onCommand:clawsouls.openChat"
-  ],
-  "main": "./dist/extension.js",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/clawsouls/clawsouls-vscode.git"
-  },
-  "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "clawsouls-agent",
-          "title": "SoulClaw",
-          "icon": "media/soul-icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "clawsouls-agent": [
-        {
-          "id": "clawsouls.chatHistory",
-          "name": "💬 Chat History"
-        },
-        {
-          "id": "clawsouls.soulExplorer",
-          "name": "📦 Soul Explorer"
-        },
-        {
-          "id": "clawsouls.swarm",
-          "name": "Swarm Memory",
-          "icon": "media/swarm-icon.png"
-        },
-        {
-          "id": "clawsouls.checkpoints",
-          "name": "📊 Soul Checkpoints"
-        }
-      ]
-    },
-    "commands": [
-      {
-        "command": "clawsouls.setup",
-        "title": "ClawSouls: Setup"
-      },
-      {
-        "command": "clawsouls.setupTelegram",
-        "title": "SoulClaw: Connect Telegram"
-      },
-      {
-        "command": "clawsouls.openChat",
-        "title": "ClawSouls: Open Chat"
-      },
-      {
-        "command": "clawsouls.initSwarm",
-        "title": "ClawSouls: Init Swarm Memory"
-      },
-      {
-        "command": "clawsouls.joinAgent",
-        "title": "ClawSouls: Join as Agent"
-      },
-      {
-        "command": "clawsouls.pushChanges",
-        "title": "ClawSouls: Push Changes"
-      },
-      {
-        "command": "clawsouls.pullLatest",
-        "title": "ClawSouls: Pull Latest"
-      },
-      {
-        "command": "clawsouls.mergeBranches",
-        "title": "ClawSouls: Merge Branches"
-      },
-      {
-        "command": "clawsouls.runScan",
-        "title": "ClawSouls: Run SoulScan"
-      },
-      {
-        "command": "clawsouls.createCheckpoint",
-        "title": "ClawSouls: Create Checkpoint"
-      },
-      {
-        "command": "clawsouls.restartGateway",
-        "title": "ClawSouls: Restart Gateway"
-      },
-      {
-        "command": "clawsouls.clearChat",
-        "title": "ClawSouls: Clear Chat"
-      },
-      {
-        "command": "clawsouls.openChatHistory",
-        "title": "Open Chat History"
-      },
-      {
-        "command": "clawsouls.deleteChatHistory",
-        "title": "Delete Chat History",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "clawsouls.switchHistory",
-        "title": "ClawSouls: Switch Chat History"
-      },
-      {
-        "command": "clawsouls.editSoul",
-        "title": "ClawSouls: Edit Soul"
-      },
-      {
-        "command": "clawsouls.swarmKeys",
-        "title": "ClawSouls: Manage Encryption Keys"
-      },
-      {
-        "command": "clawsouls.refresh",
-        "title": "Refresh",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "clawsouls.soulExplorer.search",
-        "title": "ClawSouls: Search Souls",
-        "icon": "$(search)"
-      },
-      {
-        "command": "clawsouls.soulExplorer.toggleView",
-        "title": "ClawSouls: Toggle Local/Browse",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "clawsouls.soulExplorer.apply",
-        "title": "Apply Soul to Workspace",
-        "icon": "$(cloud-download)"
-      },
-      {
-        "command": "clawsouls.soulExplorer.preview",
-        "title": "Preview Soul"
-      },
-      {
-        "command": "clawsouls.checkpoint.restore",
-        "title": "Restore Checkpoint",
-        "icon": "$(debug-reverse-continue)"
-      },
-      {
-        "command": "clawsouls.checkpoint.delete",
-        "title": "Delete Checkpoint",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "clawsouls.checkpoint.diff",
-        "title": "Diff with Current",
-        "icon": "$(diff)"
-      },
-      {
-        "command": "clawsouls.swarm.switchBranch",
-        "title": "Switch Branch"
-      },
-      {
-        "command": "clawsouls.swarm.deleteBranch",
-        "title": "Delete Branch",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "clawsouls.connect",
-        "title": "ClawSouls: Connect to Gateway"
-      },
-      {
-        "command": "soulclaw.askAboutCode",
-        "title": "SoulClaw: Ask About Code"
-      },
-      {
-        "command": "soulclaw.explainCode",
-        "title": "SoulClaw: Explain This"
-      },
-      {
-        "command": "soulclaw.fixCode",
-        "title": "SoulClaw: Fix This"
-      },
-      {
-        "command": "soulclaw.addToContext",
-        "title": "SoulClaw: Add to Context"
-      },
-      {
-        "command": "soulclaw.clearContext",
-        "title": "SoulClaw: Clear Context"
-      },
-      {
-        "command": "soulclaw.refactorCode",
-        "title": "SoulClaw: Refactor"
-      },
-      {
-        "command": "soulclaw.generateTest",
-        "title": "SoulClaw: Generate Test"
-      },
-      {
-        "command": "soulclaw.generateDocs",
-        "title": "SoulClaw: Generate Docs"
-      },
-      {
-        "command": "soulclaw.generateImpl",
-        "title": "SoulClaw: Generate Implementation"
-      },
-      {
-        "command": "soulclaw.codeLensAction",
-        "title": "SoulClaw: CodeLens Action"
-      },
-      {
-        "command": "soulclaw.stopGeneration",
-        "title": "SoulClaw: Stop Generation"
-      }
-    ],
-    "menus": {
-      "view/title": [
-        {
-          "command": "clawsouls.soulExplorer.search",
-          "when": "view == clawsouls.soulExplorer",
-          "group": "navigation@1"
-        },
-        {
-          "command": "clawsouls.soulExplorer.toggleView",
-          "when": "view == clawsouls.soulExplorer",
-          "group": "navigation@2"
-        },
-        {
-          "command": "clawsouls.refresh",
-          "when": "view == clawsouls.soulExplorer || view == clawsouls.swarm || view == clawsouls.checkpoints",
-          "group": "navigation@3"
-        }
-      ],
-      "editor/context": [
-        {
-          "command": "soulclaw.askAboutCode",
-          "group": "soulclaw@1",
-          "when": "editorHasSelection"
-        },
-        {
-          "command": "soulclaw.explainCode",
-          "group": "soulclaw@2",
-          "when": "editorHasSelection"
-        },
-        {
-          "command": "soulclaw.fixCode",
-          "group": "soulclaw@3",
-          "when": "editorHasSelection"
-        },
-        {
-          "command": "soulclaw.addToContext",
-          "group": "soulclaw@4",
-          "when": "editorHasSelection"
-        },
-        {
-          "command": "soulclaw.refactorCode",
-          "group": "soulclaw@5",
-          "when": "editorHasSelection"
-        },
-        {
-          "command": "soulclaw.generateTest",
-          "group": "soulclaw@6",
-          "when": "editorHasSelection"
-        },
-        {
-          "command": "soulclaw.generateDocs",
-          "group": "soulclaw@7",
-          "when": "editorHasSelection"
-        },
-        {
-          "command": "soulclaw.generateImpl",
-          "group": "soulclaw@8",
-          "when": "editorHasSelection"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "clawsouls.soulExplorer.apply",
-          "when": "viewItem == remoteSoul",
-          "group": "inline"
-        },
-        {
-          "command": "clawsouls.checkpoint.restore",
-          "when": "viewItem == checkpoint",
-          "group": "inline@1"
-        },
-        {
-          "command": "clawsouls.checkpoint.diff",
-          "when": "viewItem == checkpoint",
-          "group": "inline@2"
-        },
-        {
-          "command": "clawsouls.checkpoint.delete",
-          "when": "viewItem == checkpoint",
-          "group": "context"
-        },
-        {
-          "command": "clawsouls.swarm.deleteBranch",
-          "when": "viewItem == swarmBranch",
-          "group": "context"
-        },
-        {
-          "command": "clawsouls.deleteChatHistory",
-          "when": "viewItem == chatHistory",
-          "group": "inline"
-        }
-      ]
-    },
-    "keybindings": [
-      {
-        "command": "soulclaw.askAboutCode",
-        "key": "ctrl+shift+l",
-        "mac": "cmd+shift+l",
-        "when": "editorHasSelection"
-      },
-      {
-        "command": "soulclaw.addToContext",
-        "key": "ctrl+shift+;",
-        "mac": "cmd+shift+;",
-        "when": "editorHasSelection"
-      }
-    ],
-    "configuration": {
-      "title": "ClawSouls Agent",
-      "properties": {
-        "clawsouls.mode": {
-          "type": "string",
-          "default": "auto",
-          "enum": [
-            "auto",
-            "standalone",
-            "connected"
-          ],
-          "description": "Gateway connection mode"
-        },
-        "clawsouls.gatewayUrl": {
-          "type": "string",
-          "default": "ws://127.0.0.1:18789",
-          "description": "OpenClaw Gateway WebSocket URL"
-        },
-        "clawsouls.autoConnect": {
-          "type": "boolean",
-          "default": true,
-          "description": "Auto-connect to Gateway on startup"
-        },
-        "clawsouls.scanOnSave": {
-          "type": "boolean",
-          "default": true,
-          "description": "Run SoulScan on file save"
-        },
-        "clawsouls.showStatusBar": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show ClawSouls status bar"
-        },
-        "clawsouls.llmProvider": {
-          "type": "string",
-          "default": "anthropic",
-          "enum": [
-            "anthropic",
-            "openai",
-            "ollama"
-          ],
-          "description": "LLM provider"
-        },
-        "clawsouls.llmApiKey": {
-          "type": "string",
-          "default": "",
-          "description": "API key for the selected LLM provider",
-          "order": 2
-        },
-        "clawsouls.gatewayPort": {
-          "type": "number",
-          "default": 18789,
-          "description": "Gateway WebSocket port",
-          "order": 3
-        },
-        "clawsouls.llmModel": {
-          "type": "string",
-          "default": "",
-          "description": "LLM model override (e.g. claude-opus-4-6, claude-sonnet-4-20250514). Leave empty for provider default.",
-          "order": 4
-        },
-        "clawsouls.ollamaUrl": {
-          "type": "string",
-          "default": "http://127.0.0.1:11434",
-          "description": "Ollama API URL"
-        },
-        "clawsouls.ollamaModel": {
-          "type": "string",
-          "default": "llama3",
-          "description": "Ollama model name"
-        },
-        "clawsouls.maxConversationMessages": {
-          "type": "number",
-          "default": 40,
-          "description": "Maximum messages before conversation compaction"
-        },
-        "clawsouls.allowedTools": {
-          "type": "array",
-          "default": [
-            "read_file",
-            "write_file",
-            "edit_file",
-            "list_files",
-            "run_command",
-            "search_files"
-          ],
-          "description": "Tools the agent is allowed to use. Remove items to restrict.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "clawsouls.codeLensEnabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show Ask/Explain/Fix CodeLens above functions"
-        }
-      }
-    },
-    "viewsWelcome": [
-      {
-        "view": "clawsouls.soulExplorer",
-        "contents": "No soul detected in this workspace.\n[Run Setup](command:clawsouls.setup)\n[Open Chat](command:clawsouls.openChat)"
-      },
-      {
-        "view": "clawsouls.swarm",
-        "contents": "Swarm Memory not initialized.\n[Initialize Swarm Memory](command:clawsouls.initSwarm)"
-      },
-      {
-        "view": "clawsouls.checkpoints",
-        "contents": "No checkpoints found.\n[Create Checkpoint](command:clawsouls.createCheckpoint)"
-      }
-    ]
-  },
-  "scripts": {
-    "build": "node esbuild.mjs",
-    "watch": "node esbuild.mjs --watch",
-    "package": "vsce package",
-    "vscode:prepublish": "npm run build",
-    "test": "node ./out/test/runTest.js"
-  },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/vscode": "^1.85.0",
-    "@types/ws": "^8.18.1",
-    "@vscode/vsce": "^3.7.1",
-    "esbuild": "^0.27.3",
-    "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "marked": "^17.0.4",
-    "ws": "^8.19.0"
-  },
-  "author": "ClawSouls",
-  "license": "Apache-2.0",
-  "bugs": {
-    "url": "https://github.com/clawsouls/clawsouls-vscode/issues"
-  },
-  "homepage": "https://github.com/clawsouls/clawsouls-vscode#readme"
+	"name": "soulclaw-vscode",
+	"displayName": "SoulClaw — Soul-Powered AI Agent",
+	"description": "Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools",
+	"version": "0.6.39",
+	"publisher": "clawsouls",
+	"icon": "media/icon.png",
+	"engines": {
+		"vscode": "^1.85.0"
+	},
+	"categories": [
+		"AI",
+		"Chat",
+		"Machine Learning"
+	],
+	"keywords": [
+		"ai",
+		"agent",
+		"soul",
+		"persona",
+		"swarm",
+		"memory",
+		"collaboration",
+		"openclaw",
+		"team",
+		"chat"
+	],
+	"activationEvents": [
+		"onStartupFinished",
+		"onView:clawsouls.soulExplorer",
+		"onView:clawsouls.swarm",
+		"onView:clawsouls.checkpoints",
+		"onCommand:clawsouls.setup",
+		"onCommand:clawsouls.openChat",
+		"onView:clawsouls.soulscan"
+	],
+	"main": "./dist/extension.js",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/clawsouls/clawsouls-vscode.git"
+	},
+	"contributes": {
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "clawsouls-agent",
+					"title": "SoulClaw",
+					"icon": "media/soul-icon.svg"
+				}
+			]
+		},
+		"views": {
+			"clawsouls-agent": [
+				{
+					"id": "clawsouls.chatHistory",
+					"name": "💬 Chat History"
+				},
+				{
+					"id": "clawsouls.soulExplorer",
+					"name": "📦 Soul Explorer"
+				},
+				{
+					"id": "clawsouls.swarm",
+					"name": "Swarm Memory",
+					"icon": "media/swarm-icon.png"
+				},
+				{
+					"id": "clawsouls.checkpoints",
+					"name": "📊 Soul Checkpoints"
+				},
+				{
+					"id": "clawsouls.soulscan",
+					"name": "🛡️ SoulScan"
+				}
+			]
+		},
+		"commands": [
+			{
+				"command": "clawsouls.setup",
+				"title": "ClawSouls: Setup"
+			},
+			{
+				"command": "clawsouls.setupTelegram",
+				"title": "SoulClaw: Connect Telegram"
+			},
+			{
+				"command": "clawsouls.openChat",
+				"title": "ClawSouls: Open Chat"
+			},
+			{
+				"command": "clawsouls.initSwarm",
+				"title": "ClawSouls: Init Swarm Memory"
+			},
+			{
+				"command": "clawsouls.joinAgent",
+				"title": "ClawSouls: Join as Agent"
+			},
+			{
+				"command": "clawsouls.pushChanges",
+				"title": "ClawSouls: Push Changes"
+			},
+			{
+				"command": "clawsouls.pullLatest",
+				"title": "ClawSouls: Pull Latest"
+			},
+			{
+				"command": "clawsouls.mergeBranches",
+				"title": "ClawSouls: Merge Branches"
+			},
+			{
+				"command": "clawsouls.runScan",
+				"title": "ClawSouls: Run SoulScan",
+				"icon": "$(play)"
+			},
+			{
+				"command": "clawsouls.createCheckpoint",
+				"title": "ClawSouls: Create Checkpoint"
+			},
+			{
+				"command": "clawsouls.restartGateway",
+				"title": "ClawSouls: Restart Gateway"
+			},
+			{
+				"command": "clawsouls.clearChat",
+				"title": "ClawSouls: Clear Chat"
+			},
+			{
+				"command": "clawsouls.openChatHistory",
+				"title": "Open Chat History"
+			},
+			{
+				"command": "clawsouls.deleteChatHistory",
+				"title": "Delete Chat History",
+				"icon": "$(trash)"
+			},
+			{
+				"command": "clawsouls.switchHistory",
+				"title": "ClawSouls: Switch Chat History"
+			},
+			{
+				"command": "clawsouls.editSoul",
+				"title": "ClawSouls: Edit Soul"
+			},
+			{
+				"command": "clawsouls.swarmKeys",
+				"title": "ClawSouls: Manage Encryption Keys"
+			},
+			{
+				"command": "clawsouls.refresh",
+				"title": "Refresh",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "clawsouls.soulExplorer.search",
+				"title": "ClawSouls: Search Souls",
+				"icon": "$(search)"
+			},
+			{
+				"command": "clawsouls.soulExplorer.toggleView",
+				"title": "ClawSouls: Toggle Local/Browse",
+				"icon": "$(list-tree)"
+			},
+			{
+				"command": "clawsouls.soulExplorer.apply",
+				"title": "Apply Soul to Workspace",
+				"icon": "$(cloud-download)"
+			},
+			{
+				"command": "clawsouls.soulExplorer.preview",
+				"title": "Preview Soul"
+			},
+			{
+				"command": "clawsouls.checkpoint.restore",
+				"title": "Restore Checkpoint",
+				"icon": "$(debug-reverse-continue)"
+			},
+			{
+				"command": "clawsouls.checkpoint.delete",
+				"title": "Delete Checkpoint",
+				"icon": "$(trash)"
+			},
+			{
+				"command": "clawsouls.checkpoint.diff",
+				"title": "Diff with Current",
+				"icon": "$(diff)"
+			},
+			{
+				"command": "clawsouls.swarm.switchBranch",
+				"title": "Switch Branch"
+			},
+			{
+				"command": "clawsouls.swarm.deleteBranch",
+				"title": "Delete Branch",
+				"icon": "$(trash)"
+			},
+			{
+				"command": "clawsouls.connect",
+				"title": "ClawSouls: Connect to Gateway"
+			},
+			{
+				"command": "soulclaw.askAboutCode",
+				"title": "SoulClaw: Ask About Code"
+			},
+			{
+				"command": "soulclaw.explainCode",
+				"title": "SoulClaw: Explain This"
+			},
+			{
+				"command": "soulclaw.fixCode",
+				"title": "SoulClaw: Fix This"
+			},
+			{
+				"command": "soulclaw.addToContext",
+				"title": "SoulClaw: Add to Context"
+			},
+			{
+				"command": "soulclaw.clearContext",
+				"title": "SoulClaw: Clear Context"
+			},
+			{
+				"command": "soulclaw.refactorCode",
+				"title": "SoulClaw: Refactor"
+			},
+			{
+				"command": "soulclaw.generateTest",
+				"title": "SoulClaw: Generate Test"
+			},
+			{
+				"command": "soulclaw.generateDocs",
+				"title": "SoulClaw: Generate Docs"
+			},
+			{
+				"command": "soulclaw.generateImpl",
+				"title": "SoulClaw: Generate Implementation"
+			},
+			{
+				"command": "soulclaw.codeLensAction",
+				"title": "SoulClaw: CodeLens Action"
+			},
+			{
+				"command": "soulclaw.stopGeneration",
+				"title": "SoulClaw: Stop Generation"
+			}
+		],
+		"menus": {
+			"view/title": [
+				{
+					"command": "clawsouls.soulExplorer.search",
+					"when": "view == clawsouls.soulExplorer",
+					"group": "navigation@1"
+				},
+				{
+					"command": "clawsouls.soulExplorer.toggleView",
+					"when": "view == clawsouls.soulExplorer",
+					"group": "navigation@2"
+				},
+				{
+					"command": "clawsouls.refresh",
+					"when": "view == clawsouls.soulExplorer || view == clawsouls.swarm || view == clawsouls.checkpoints || view == clawsouls.soulscan",
+					"group": "navigation@3"
+				},
+				{
+					"command": "clawsouls.runScan",
+					"when": "view == clawsouls.soulscan",
+					"group": "navigation@1"
+				}
+			],
+			"editor/context": [
+				{
+					"command": "soulclaw.askAboutCode",
+					"group": "soulclaw@1",
+					"when": "editorHasSelection"
+				},
+				{
+					"command": "soulclaw.explainCode",
+					"group": "soulclaw@2",
+					"when": "editorHasSelection"
+				},
+				{
+					"command": "soulclaw.fixCode",
+					"group": "soulclaw@3",
+					"when": "editorHasSelection"
+				},
+				{
+					"command": "soulclaw.addToContext",
+					"group": "soulclaw@4",
+					"when": "editorHasSelection"
+				},
+				{
+					"command": "soulclaw.refactorCode",
+					"group": "soulclaw@5",
+					"when": "editorHasSelection"
+				},
+				{
+					"command": "soulclaw.generateTest",
+					"group": "soulclaw@6",
+					"when": "editorHasSelection"
+				},
+				{
+					"command": "soulclaw.generateDocs",
+					"group": "soulclaw@7",
+					"when": "editorHasSelection"
+				},
+				{
+					"command": "soulclaw.generateImpl",
+					"group": "soulclaw@8",
+					"when": "editorHasSelection"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "clawsouls.soulExplorer.apply",
+					"when": "viewItem == remoteSoul",
+					"group": "inline"
+				},
+				{
+					"command": "clawsouls.checkpoint.restore",
+					"when": "viewItem == checkpoint",
+					"group": "inline@1"
+				},
+				{
+					"command": "clawsouls.checkpoint.diff",
+					"when": "viewItem == checkpoint",
+					"group": "inline@2"
+				},
+				{
+					"command": "clawsouls.checkpoint.delete",
+					"when": "viewItem == checkpoint",
+					"group": "context"
+				},
+				{
+					"command": "clawsouls.swarm.deleteBranch",
+					"when": "viewItem == swarmBranch",
+					"group": "context"
+				},
+				{
+					"command": "clawsouls.deleteChatHistory",
+					"when": "viewItem == chatHistory",
+					"group": "inline"
+				}
+			]
+		},
+		"keybindings": [
+			{
+				"command": "soulclaw.askAboutCode",
+				"key": "ctrl+shift+l",
+				"mac": "cmd+shift+l",
+				"when": "editorHasSelection"
+			},
+			{
+				"command": "soulclaw.addToContext",
+				"key": "ctrl+shift+;",
+				"mac": "cmd+shift+;",
+				"when": "editorHasSelection"
+			}
+		],
+		"configuration": {
+			"title": "ClawSouls Agent",
+			"properties": {
+				"clawsouls.mode": {
+					"type": "string",
+					"default": "auto",
+					"enum": [
+						"auto",
+						"standalone",
+						"connected"
+					],
+					"description": "Gateway connection mode"
+				},
+				"clawsouls.gatewayUrl": {
+					"type": "string",
+					"default": "ws://127.0.0.1:18789",
+					"description": "OpenClaw Gateway WebSocket URL"
+				},
+				"clawsouls.autoConnect": {
+					"type": "boolean",
+					"default": true,
+					"description": "Auto-connect to Gateway on startup"
+				},
+				"clawsouls.scanOnSave": {
+					"type": "boolean",
+					"default": true,
+					"description": "Run SoulScan on file save"
+				},
+				"clawsouls.showStatusBar": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show ClawSouls status bar"
+				},
+				"clawsouls.llmProvider": {
+					"type": "string",
+					"default": "anthropic",
+					"enum": [
+						"anthropic",
+						"openai",
+						"ollama"
+					],
+					"description": "LLM provider"
+				},
+				"clawsouls.llmApiKey": {
+					"type": "string",
+					"default": "",
+					"description": "API key for the selected LLM provider",
+					"order": 2
+				},
+				"clawsouls.gatewayPort": {
+					"type": "number",
+					"default": 18789,
+					"description": "Gateway WebSocket port",
+					"order": 3
+				},
+				"clawsouls.llmModel": {
+					"type": "string",
+					"default": "",
+					"description": "LLM model override (e.g. claude-opus-4-6, claude-sonnet-4-20250514). Leave empty for provider default.",
+					"order": 4
+				},
+				"clawsouls.ollamaUrl": {
+					"type": "string",
+					"default": "http://127.0.0.1:11434",
+					"description": "Ollama API URL"
+				},
+				"clawsouls.ollamaModel": {
+					"type": "string",
+					"default": "llama3",
+					"description": "Ollama model name"
+				},
+				"clawsouls.maxConversationMessages": {
+					"type": "number",
+					"default": 40,
+					"description": "Maximum messages before conversation compaction"
+				},
+				"clawsouls.allowedTools": {
+					"type": "array",
+					"default": [
+						"read_file",
+						"write_file",
+						"edit_file",
+						"list_files",
+						"run_command",
+						"search_files"
+					],
+					"description": "Tools the agent is allowed to use. Remove items to restrict.",
+					"items": {
+						"type": "string"
+					}
+				},
+				"clawsouls.codeLensEnabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show Ask/Explain/Fix CodeLens above functions"
+				}
+			}
+		},
+		"viewsWelcome": [
+			{
+				"view": "clawsouls.soulExplorer",
+				"contents": "No soul detected in this workspace.\n[Run Setup](command:clawsouls.setup)\n[Open Chat](command:clawsouls.openChat)"
+			},
+			{
+				"view": "clawsouls.swarm",
+				"contents": "Swarm Memory not initialized.\n[Initialize Swarm Memory](command:clawsouls.initSwarm)"
+			},
+			{
+				"view": "clawsouls.checkpoints",
+				"contents": "No checkpoints found.\n[Create Checkpoint](command:clawsouls.createCheckpoint)"
+			}
+		]
+	},
+	"scripts": {
+		"build": "node esbuild.mjs",
+		"watch": "node esbuild.mjs --watch",
+		"package": "vsce package",
+		"vscode:prepublish": "npm run build",
+		"test": "node ./out/test/runTest.js"
+	},
+	"devDependencies": {
+		"@types/node": "^20.0.0",
+		"@types/vscode": "^1.85.0",
+		"@types/ws": "^8.18.1",
+		"@vscode/vsce": "^3.7.1",
+		"esbuild": "^0.27.3",
+		"typescript": "^5.9.3"
+	},
+	"dependencies": {
+		"marked": "^17.0.4",
+		"ws": "^8.19.0"
+	},
+	"author": "ClawSouls",
+	"license": "Apache-2.0",
+	"bugs": {
+		"url": "https://github.com/clawsouls/clawsouls-vscode/issues"
+	},
+	"homepage": "https://github.com/clawsouls/clawsouls-vscode#readme"
 }

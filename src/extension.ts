@@ -8,6 +8,7 @@ import { WorkspaceTracker } from './context/workspaceTracker';
 import { CheckpointProvider } from './ui/checkpointPanel';
 import { SwarmProvider } from './ui/swarmPanel';
 import { ChatHistoryProvider } from './ui/chatHistoryPanel';
+import { SoulScanProvider } from './ui/soulscanPanel';
 import { setupWizard } from './commands/setup';
 import { registerCodeActions } from './commands/codeActions';
 import { SoulClawCodeLensProvider } from './providers/codeLensProvider';
@@ -47,29 +48,24 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('clawsouls.restartGateway', () => restartEngine()),
 		vscode.commands.registerCommand('clawsouls.connect', () => restartEngine()),
 		vscode.commands.registerCommand('clawsouls.runScan', async () => {
-			const { scanSoulFiles } = require('./engine/soulscan');
-			const scanDir = getWorkspaceDir();
-			const result = scanSoulFiles(scanDir);
-
-			if (result.fileCount === 0) {
-				vscode.window.showWarningMessage('No soul files found to scan.');
-				return;
+			if ((globalThis as any).__soulScanProvider) {
+				const provider = (globalThis as any).__soulScanProvider as SoulScanProvider;
+				provider.runScan();
+				const result = provider.getLastResult();
+				if (result) {
+					outputChannel.appendLine(`SoulScan result: ${result.grade} (${result.score}/100), ${result.issues.length} issues`);
+					if (result.fileCount === 0) {
+						vscode.window.showWarningMessage('No soul files found to scan.');
+					} else {
+						const msg = `SoulScan: ${result.grade} (${result.score}/100) — ${result.fileCount} files, ${result.issues.length} issue(s)`;
+						if (result.score >= 75) {
+							vscode.window.showInformationMessage(msg);
+						} else {
+							vscode.window.showWarningMessage(msg);
+						}
+					}
+				}
 			}
-
-			const detail = result.issues.length > 0
-				? result.issues.map((i: any) => `${i.severity === 'error' ? '❌' : i.severity === 'warning' ? '⚠️' : 'ℹ️'} [${i.rule}] ${i.message}${i.file ? ` (${i.file}:${i.line})` : ''}`).join('\n')
-				: '✅ No issues found';
-
-			const msg = `SoulScan: ${result.grade} (${result.score}/100) — ${result.fileCount} files, ${result.issues.length} issue(s)`;
-			
-			if (result.score >= 75) {
-				vscode.window.showInformationMessage(msg, { detail, modal: result.issues.length > 0 } as any);
-			} else {
-				vscode.window.showWarningMessage(msg, { detail, modal: true } as any);
-			}
-
-			// Update status bar scan badge
-			outputChannel.appendLine(`SoulScan result: ${result.grade} (${result.score}/100), ${result.issues.length} issues`);
 		}),
 		vscode.commands.registerCommand('clawsouls.editSoul', async () => {
 			const ws = vscode.workspace.workspaceFolders;
@@ -139,6 +135,13 @@ export async function activate(context: vscode.ExtensionContext) {
 		const checkpointProvider = new CheckpointProvider(context);
 		vscode.window.createTreeView('clawsouls.checkpoints', {
 			treeDataProvider: checkpointProvider
+		});
+
+		// Initialize SoulScan panel
+		const soulscanProvider = new SoulScanProvider(context);
+		(globalThis as any).__soulScanProvider = soulscanProvider;
+		vscode.window.createTreeView('clawsouls.soulscan', {
+			treeDataProvider: soulscanProvider
 		});
 
 		// Auto-checkpoint on soul file save
