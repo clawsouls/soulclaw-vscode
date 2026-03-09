@@ -13,6 +13,28 @@ import { buildSystemPrompt } from './prompt-builder';
 import { getAnthropicTools, executeTool, type ToolCall } from './tools';
 import { loadPersonaProfile, detectDrift } from './drift-detector';
 
+/** Max context tokens (90% of 200K, leaving room for response) */
+const MAX_CONTEXT_TOKENS = 180_000;
+
+/** Estimate tokens for a string. CJK-aware: detects ratio and adapts. */
+function estimateTokens(text: string): number {
+	if (!text) return 0;
+	// Count CJK characters (Chinese, Japanese, Korean)
+	const cjkCount = (text.match(/[\u3000-\u9fff\uac00-\ud7af\uf900-\ufaff]/g) || []).length;
+	const totalChars = text.length;
+	if (totalChars === 0) return 0;
+	const cjkRatio = cjkCount / totalChars;
+	// Blend: CJK ~2 chars/token, Latin ~4 chars/token
+	const charsPerToken = 4 - (cjkRatio * 2); // ranges from 4 (all latin) to 2 (all CJK)
+	return Math.ceil(totalChars / charsPerToken);
+}
+
+/** Estimate tokens for an LLM message (handles string and structured content) */
+function estimateMessageTokens(msg: { content: any }): number {
+	if (typeof msg.content === 'string') return estimateTokens(msg.content);
+	return estimateTokens(JSON.stringify(msg.content));
+}
+
 export class SoulClawEngine extends EventEmitter {
 	private config!: EngineConfig;
 	private llm!: LLMClient;
@@ -97,11 +119,16 @@ export class SoulClawEngine extends EventEmitter {
 				model: this.llm.model,
 			});
 
-			// Build message history for LLM
+			// Build message history for LLM with token budget
 			const history = this.sessions.getMessages(key);
+			const systemTokens = estimateTokens(systemPrompt);
+			const toolsTokens = tools ? estimateTokens(JSON.stringify(tools)) : 0;
+			const historyBudget = MAX_CONTEXT_TOKENS - systemTokens - toolsTokens;
+			this.log(`Token estimate — system: ${systemTokens}, tools: ${toolsTokens}, history budget: ${historyBudget}`);
+
 			const llmMessages: LLMMessage[] = [
 				{ role: 'system', content: systemPrompt },
-				...this.truncateHistory(history),
+				...this.truncateHistory(history, undefined, historyBudget),
 			];
 
 			// Get tools based on provider, filtered by user allowlist
@@ -342,37 +369,84 @@ export class SoulClawEngine extends EventEmitter {
 
 	/**
 	 * Truncate and compact conversation history.
-	 * If messages exceed limit, summarize older ones into a compact block.
+	 * Applies both message count limit AND token budget limit.
+	 * Older messages are summarized into a compact block.
 	 */
-	private truncateHistory(messages: ChatMessage[], maxMessages?: number): LLMMessage[] {
+	private truncateHistory(messages: ChatMessage[], maxMessages?: number, tokenBudget?: number): LLMMessage[] {
 		let max = maxMessages || 40;
 		try {
 			const vscode = require('vscode');
 			max = vscode.workspace.getConfiguration('clawsouls').get('maxConversationMessages', 40);
 		} catch {}
 
-		if (messages.length <= max) {
-			return messages.map(m => ({
-				role: m.role as 'user' | 'assistant',
-				content: m.content,
-			}));
+		const budget = tokenBudget || MAX_CONTEXT_TOKENS;
+
+		// Convert all messages
+		const allLlm: LLMMessage[] = messages.map(m => ({
+			role: m.role as 'user' | 'assistant',
+			content: m.content,
+		}));
+
+		// If within both limits, return as-is
+		if (allLlm.length <= max) {
+			const totalTokens = allLlm.reduce((sum, m) => sum + estimateMessageTokens(m), 0);
+			if (totalTokens <= budget) {
+				return allLlm;
+			}
 		}
 
-		// Compact: summarize first N-max messages, keep last max
-		const oldMessages = messages.slice(0, messages.length - max);
-		const recentMessages = messages.slice(-max);
-		
-		const summary = oldMessages.map(m => 
-			`[${m.role}]: ${m.content.slice(0, 100)}${m.content.length > 100 ? '...' : ''}`
-		).join('\n');
+		// Apply message count limit first
+		let candidates = allLlm.length > max ? allLlm.slice(-max) : allLlm;
+		const droppedByCount = allLlm.length - candidates.length;
+
+		// Apply token budget: walk from newest to oldest
+		let usedTokens = 0;
+		let keepFrom = candidates.length; // will count down
+		for (let i = candidates.length - 1; i >= 0; i--) {
+			const msgTokens = estimateMessageTokens(candidates[i]);
+			if (usedTokens + msgTokens > budget) {
+				break;
+			}
+			usedTokens += msgTokens;
+			keepFrom = i;
+		}
+
+		const keptMessages = candidates.slice(keepFrom);
+		const droppedByTokens = candidates.length - keptMessages.length;
+		const totalDropped = droppedByCount + droppedByTokens;
+
+		// Fallback: if even recent messages exceed budget, keep last 10
+		if (keptMessages.length === 0) {
+			this.log(`⚠️ Token budget exhausted, falling back to last 10 messages`);
+			const fallback = allLlm.slice(-10);
+			return fallback;
+		}
+
+		// No compaction needed
+		if (totalDropped === 0) {
+			return keptMessages;
+		}
+
+		// Build summary of dropped messages
+		const droppedMessages = messages.slice(0, messages.length - keptMessages.length);
+		const summaryLines: string[] = [];
+		let summaryTokens = 0;
+		const summaryBudget = Math.min(2000, budget * 0.1); // max 10% of budget for summary
+
+		for (const m of droppedMessages) {
+			const line = `[${m.role}]: ${m.content.slice(0, 100)}${m.content.length > 100 ? '...' : ''}`;
+			const lineTokens = estimateTokens(line);
+			if (summaryTokens + lineTokens > summaryBudget) break;
+			summaryLines.push(line);
+			summaryTokens += lineTokens;
+		}
+
+		this.log(`Compacted: dropped ${totalDropped} msgs (${droppedByCount} by count, ${droppedByTokens} by tokens), kept ${keptMessages.length}, summary ${summaryTokens} tokens`);
 
 		const compacted: LLMMessage[] = [
-			{ role: 'user', content: `[Previous conversation summary (${oldMessages.length} messages)]\n${summary}` },
+			{ role: 'user', content: `[Previous conversation summary (${totalDropped} messages)]\n${summaryLines.join('\n')}` },
 			{ role: 'assistant', content: 'Understood, I have the context from our previous conversation.' },
-			...recentMessages.map(m => ({
-				role: m.role as 'user' | 'assistant',
-				content: m.content,
-			})),
+			...keptMessages,
 		];
 
 		return compacted;
