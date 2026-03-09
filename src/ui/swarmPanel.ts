@@ -99,7 +99,6 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		items.push(new SwarmActionNode('⬇ Pull', 'clawsouls.pullLatest', 'cloud-download'));
 		items.push(new SwarmActionNode('🔀 Merge', 'clawsouls.mergeBranches', 'git-merge'));
 		items.push(new SwarmActionNode('🔐 Encryption Keys', 'clawsouls.swarmKeys', 'key'));
-		items.push(new SwarmActionNode('➕ New Branch', 'clawsouls.joinAgent', 'add'));
 
 		// Conflicts / merge in progress
 		if (this.hasConflicts || this.mergeInProgress) {
@@ -113,6 +112,9 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		for (const br of this.branches) {
 			items.push(new SwarmBranchNode(br));
 		}
+
+		// New Branch at the end
+		items.push(new SwarmActionNode('➕ New Branch', 'clawsouls.joinAgent', 'add'));
 
 		return items;
 	}
