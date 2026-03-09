@@ -386,6 +386,31 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 
 		this.syncWorkspaceToSwarm(swarmDir, out);
 
+		// Encrypt memory files if age recipient is configured
+		try {
+			const recipientsFile = path.join(swarmDir, '.soulscan', 'age-recipients.txt');
+			if (fs.existsSync(recipientsFile)) {
+				const recipients = fs.readFileSync(recipientsFile, 'utf8').trim();
+				if (recipients) {
+					const memFiles: string[] = [];
+					const memoryMd = path.join(swarmDir, 'MEMORY.md');
+					if (fs.existsSync(memoryMd)) memFiles.push(memoryMd);
+					const memDir = path.join(swarmDir, 'memory');
+					if (fs.existsSync(memDir)) {
+						for (const f of fs.readdirSync(memDir)) {
+							if (f.endsWith('.md')) memFiles.push(path.join(memDir, f));
+						}
+					}
+					for (const f of memFiles) {
+						try {
+							execSync(`age -r "${recipients.split('\\n')[0]}" -o "${f}.age" "${f}"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+						} catch { /* age not installed — skip */ }
+					}
+					if (memFiles.length > 0) out?.appendLine(`[Swarm] encrypted ${memFiles.length} memory file(s)`);
+				}
+			}
+		} catch { /* encryption optional */ }
+
 		try {
 			// Stage all changes
 			execSync('git add -A', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
