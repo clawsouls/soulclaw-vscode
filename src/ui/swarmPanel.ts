@@ -388,7 +388,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 
 		// Encrypt memory files if age recipient is configured
 		try {
-			const recipientsFile = path.join(swarmDir, '.soulscan', 'age-recipients.txt');
+			const recipientsFile = path.join(require('os').homedir(), '.clawsouls', 'keys', 'recipients.txt');
 			if (fs.existsSync(recipientsFile)) {
 				const recipients = fs.readFileSync(recipientsFile, 'utf8').trim();
 				if (recipients) {
@@ -403,7 +403,9 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 					}
 					for (const f of memFiles) {
 						try {
-							execSync(`age -r "${recipients.split('\\n')[0]}" -o "${f}.age" "${f}"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+							const ageBin = fs.existsSync(path.join(require('os').homedir(), '.local', 'bin', 'age')) 
+								? path.join(require('os').homedir(), '.local', 'bin', 'age') : 'age';
+							execSync(`"${ageBin}" -r "${recipients.split('\\n')[0]}" -o "${f}.age" "${f}"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 						} catch { /* age not installed — skip */ }
 					}
 					if (memFiles.length > 0) out?.appendLine(`[Swarm] encrypted ${memFiles.length} memory file(s)`);
