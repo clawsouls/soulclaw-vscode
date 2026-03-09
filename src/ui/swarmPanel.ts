@@ -99,6 +99,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		items.push(new SwarmActionNode('⬇ Pull', 'clawsouls.pullLatest', 'cloud-download'));
 		items.push(new SwarmActionNode('🔀 Merge', 'clawsouls.mergeBranches', 'git-merge'));
 		items.push(new SwarmActionNode('🔐 Encryption Keys', 'clawsouls.swarmKeys', 'key'));
+		items.push(new SwarmActionNode('➕ New Branch', 'clawsouls.joinAgent', 'add'));
 
 		// Conflicts
 		if (this.hasConflicts) {
@@ -225,6 +226,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 				vscode.window.showInformationMessage(`✅ Swarm Memory initialized at: ${swarmDir}`);
 			}
 			this.refresh();
+			try { await vscode.commands.executeCommand('clawsouls.refreshStatusBar'); } catch {}
 		} catch (err: any) {
 			vscode.window.showErrorMessage(`Swarm Memory init failed: ${err.message}`);
 		}
@@ -271,6 +273,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			execSync('git add -A && git commit -m "init: agent joined" --allow-empty', { cwd: swarmDir, encoding: 'utf8' });
 			vscode.window.showInformationMessage(`✅ Joined as "${branchName}".`);
 			this.refresh();
+			try { await vscode.commands.executeCommand('clawsouls.refreshStatusBar'); } catch {}
 		} catch (err: any) {
 			vscode.window.showErrorMessage(`Join failed: ${err.message}`);
 		}

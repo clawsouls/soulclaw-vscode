@@ -58,7 +58,7 @@ export class StatusBarManager {
 			this.restartItem,
 			this.setupItem,
 			soulWatcher,
-			vscode.commands.registerCommand('clawsouls.refreshStatusBar', () => this.refreshSoulName()),
+			vscode.commands.registerCommand('clawsouls.refreshStatusBar', () => { this.refreshSoulName(); this.refreshAgentName(); }),
 			vscode.commands.registerCommand('clawsouls.selectModel', () => this.selectModel())
 		);
 	}
@@ -211,6 +211,11 @@ export class StatusBarManager {
 		this.soulStatusItem.text = '🔮 No Soul';
 	}
 	
+	private refreshAgentName(): void {
+		const name = this.getCurrentAgentName();
+		this.agentStatusItem.text = `🐝 ${name}`;
+	}
+
 	private getCurrentAgentName(): string {
 		try {
 			const { getSwarmDir } = require('../paths');
