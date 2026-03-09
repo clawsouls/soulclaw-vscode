@@ -314,7 +314,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		this.mergeBranchName = picked;
 
 		try {
-			execSync(`git merge "${picked}" --no-commit`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			execSync(`git merge "${picked}" --no-commit --allow-unrelated-histories`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 			// Clean merge — commit it
 			execSync(`git commit -m "swarm merge: ${picked}" --no-verify`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 			vscode.window.showInformationMessage(`✅ Merged "${picked}" (clean)`);
