@@ -377,10 +377,40 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 	}
 
 	private async pushWithSync(): Promise<void> {
-		const out = globalThis.__soulclawOutput;
+		const out = (globalThis as any).__soulclawOutput;
 		const swarmDir = this.getSwarmDir();
+		if (!this.initialized) {
+			vscode.window.showWarningMessage('Initialize swarm first.');
+			return;
+		}
+
 		this.syncWorkspaceToSwarm(swarmDir, out);
-		await this.runCli('swarm push');
+
+		try {
+			// Stage all changes
+			execSync('git add -A', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			
+			// Check if there are changes to commit
+			try {
+				execSync('git diff --cached --quiet', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+				// No changes — just push any unpushed commits
+			} catch {
+				// Has staged changes — commit them
+				const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+				execSync(`git commit -m "swarm sync ${now}" --no-verify`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+				out?.appendLine('[Swarm] committed changes');
+			}
+
+			// Push to remote
+			const branch = this.getCurrentBranch() || 'agent/main';
+			execSync(`git push origin "${branch}" 2>&1`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			vscode.window.showInformationMessage(`✅ Pushed to ${branch}`);
+			out?.appendLine(`[Swarm] pushed to origin/${branch}`);
+			this.refresh();
+		} catch (err: any) {
+			vscode.window.showErrorMessage(`Push failed: ${err.message}`);
+			out?.appendLine(`[Swarm] push error: ${err.message}`);
+		}
 	}
 
 	/** Sync swarm branch memory files → workspace (overwrite) */
