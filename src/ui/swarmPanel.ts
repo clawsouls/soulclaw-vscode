@@ -101,9 +101,9 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		items.push(new SwarmActionNode('🔐 Encryption Keys', 'clawsouls.swarmKeys', 'key'));
 		items.push(new SwarmActionNode('➕ New Branch', 'clawsouls.joinAgent', 'add'));
 
-		// Conflicts
-		if (this.hasConflicts) {
-			items.push(new SwarmActionNode(`⚠️ ${this.conflictedFiles.length} Conflict(s)`, 'clawsouls.mergeBranches', 'warning'));
+		// Conflicts / merge in progress
+		if (this.hasConflicts || this.mergeInProgress) {
+			items.push(new SwarmActionNode(`⚠️ ${this.conflictedFiles.length} Conflict(s) — Click to resolve`, 'clawsouls.mergeBranches', 'warning'));
 			for (const f of this.conflictedFiles) {
 				items.push(new SwarmActionNode(`  ├ ${f}`, 'clawsouls.mergeBranches', 'diff'));
 			}
@@ -287,9 +287,18 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		}
 	}
 
+	private mergeInProgress = false;
+	private mergeBranchName = '';
+
 	private async mergeBranches(): Promise<void> {
 		const swarmDir = this.getSwarmDir();
+		const out = (globalThis as any).__soulclawOutput;
 		if (!this.initialized) return;
+
+		// If merge in progress, show resolve options
+		if (this.hasConflicts || this.mergeInProgress) {
+			return this.handleMergeConflicts(swarmDir, out);
+		}
 
 		const otherBranches = this.branches.filter(b => !b.current).map(b => b.name);
 		if (otherBranches.length === 0) {
@@ -302,26 +311,191 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		});
 		if (!picked) return;
 
-		const strategy = await vscode.window.showQuickPick(
-			[
-				{ label: 'Git merge (default)', value: 'git' },
-				{ label: 'LLM semantic merge (Ollama)', value: 'llm' }
-			],
-			{ placeHolder: 'Select merge strategy' }
-		);
-		if (!strategy) return;
+		this.mergeBranchName = picked;
 
-		if (strategy.value === 'llm') {
-			this.runCli(`swarm merge "${picked}" --strategy llm`);
-		} else {
-			try {
-				execSync(`git merge "${picked}"`, { cwd: swarmDir, encoding: 'utf8' });
-				vscode.window.showInformationMessage(`✅ Merged "${picked}" into current branch.`);
+		try {
+			execSync(`git merge "${picked}" --no-commit`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			// Clean merge — commit it
+			execSync(`git commit -m "swarm merge: ${picked}" --no-verify`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			vscode.window.showInformationMessage(`✅ Merged "${picked}" (clean)`);
+			// Push
+			const branch = this.getCurrentBranch();
+			if (branch) {
+				try { execSync(`git push origin "${branch}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }); } catch {}
+			}
+			this.refresh();
+		} catch {
+			// Check for conflicts
+			this.refresh();
+			if (this.hasConflicts) {
+				this.mergeInProgress = true;
 				this.refresh();
-			} catch (err: any) {
-				vscode.window.showWarningMessage(`Merge conflict — resolve manually or try LLM merge.\n${err.message}`);
+				await this.handleMergeConflicts(swarmDir, out);
+			} else {
+				// Merge failed for other reason
+				try { execSync('git merge --abort', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }); } catch {}
+				vscode.window.showErrorMessage('Merge failed.');
 			}
 		}
+	}
+
+	private async handleMergeConflicts(swarmDir: string, out?: any): Promise<void> {
+		const action = await vscode.window.showQuickPick(
+			[
+				{ label: '🤖 LLM Resolve', description: 'Auto-resolve with Ollama', value: 'llm' },
+				{ label: '✏️ Open in Editor', description: 'Resolve manually in VSCode', value: 'editor' },
+				{ label: '✅ Complete Merge', description: 'All conflicts resolved — commit & push', value: 'complete' },
+				{ label: '↩️ Abort', description: 'Cancel merge', value: 'abort' },
+			],
+			{ placeHolder: `${this.conflictedFiles.length} conflict(s) — choose resolution` }
+		);
+		if (!action) return;
+
+		if (action.value === 'abort') {
+			try { execSync('git merge --abort', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }); } catch {}
+			this.mergeInProgress = false;
+			vscode.window.showInformationMessage('Merge aborted.');
+			this.refresh();
+
+		} else if (action.value === 'editor') {
+			// Open conflicted files in VSCode editor
+			for (const f of this.conflictedFiles) {
+				const filePath = path.join(swarmDir, f);
+				if (fs.existsSync(filePath)) {
+					const doc = await vscode.workspace.openTextDocument(filePath);
+					await vscode.window.showTextDocument(doc, { preview: false });
+				}
+			}
+			vscode.window.showInformationMessage(
+				`Opened ${this.conflictedFiles.length} file(s). Edit to resolve, then click "✅ Complete Merge" in Swarm panel.`
+			);
+
+		} else if (action.value === 'complete') {
+			try {
+				execSync('git add -A', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+				execSync(`git commit -m "swarm merge: ${this.mergeBranchName} (resolved)" --no-verify`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+				const branch = this.getCurrentBranch();
+				if (branch) {
+					try { execSync(`git push origin "${branch}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }); } catch {}
+				}
+				this.mergeInProgress = false;
+				vscode.window.showInformationMessage(`✅ Merge complete!`);
+				out?.appendLine('[Swarm] merge completed');
+				this.refresh();
+			} catch (err: any) {
+				vscode.window.showErrorMessage(`Complete merge failed: ${err.message}`);
+			}
+
+		} else if (action.value === 'llm') {
+			await this.llmResolveConflicts(swarmDir, out);
+		}
+	}
+
+	private async llmResolveConflicts(swarmDir: string, out?: any): Promise<void> {
+		// Check Ollama availability
+		let ollamaUrl = 'http://localhost:11434';
+		try {
+			execSync(`curl -s ${ollamaUrl}/api/tags`, { encoding: 'utf8', timeout: 3000 });
+		} catch {
+			vscode.window.showErrorMessage('Ollama not available. Start with: ollama serve');
+			return;
+		}
+
+		// Get models
+		let models: string[] = [];
+		try {
+			const resp = JSON.parse(execSync(`curl -s ${ollamaUrl}/api/tags`, { encoding: 'utf8' }));
+			models = (resp.models || []).map((m: any) => m.name).filter((n: string) => !n.includes('embed'));
+		} catch {}
+
+		if (models.length === 0) {
+			vscode.window.showErrorMessage('No Ollama models found. Run: ollama pull qwen3:8b');
+			return;
+		}
+
+		const model = models.length === 1 ? models[0] : await vscode.window.showQuickPick(models, { placeHolder: 'Select LLM model for merge' });
+		if (!model) return;
+
+		await vscode.window.withProgress(
+			{ location: vscode.ProgressLocation.Notification, title: 'LLM Merge', cancellable: false },
+			async (progress) => {
+				let resolved = 0;
+				for (const f of this.conflictedFiles) {
+					progress.report({ message: `Resolving ${f}...`, increment: 100 / this.conflictedFiles.length });
+
+					const filePath = path.join(swarmDir, f);
+					const content = fs.readFileSync(filePath, 'utf8');
+
+					// Extract ours/theirs from conflict markers
+					const ours: string[] = [];
+					const theirs: string[] = [];
+					let inOurs = false, inTheirs = false;
+					for (const line of content.split('\n')) {
+						if (line.startsWith('<<<<<<<')) { inOurs = true; continue; }
+						if (line.startsWith('=======')) { inOurs = false; inTheirs = true; continue; }
+						if (line.startsWith('>>>>>>>')) { inTheirs = false; continue; }
+						if (inOurs) ours.push(line);
+						else if (inTheirs) theirs.push(line);
+					}
+
+					const prompt = `You are merging two versions of a file called "${f}" from different AI agents.
+
+VERSION A (current branch):
+${ours.join('\n')}
+
+VERSION B (incoming branch):
+${theirs.join('\n')}
+
+Merge these two versions intelligently:
+- Keep ALL unique information from both
+- Remove duplicates
+- Maintain consistent formatting
+- For memory files: combine all entries chronologically
+- Output ONLY the merged content, no explanations`;
+
+					try {
+						const resp = JSON.parse(execSync(
+							`curl -s ${ollamaUrl}/api/generate -d '${JSON.stringify({ model, prompt, stream: false })}'`,
+							{ encoding: 'utf8', timeout: 60000 }
+						));
+						const merged = resp.response?.trim();
+						if (merged) {
+							// Replace conflict markers with merged content
+							const lines = content.split('\n');
+							const result: string[] = [];
+							let skip = false;
+							for (const line of lines) {
+								if (line.startsWith('<<<<<<<')) { skip = true; result.push(merged); continue; }
+								if (line.startsWith('>>>>>>>')) { skip = false; continue; }
+								if (!skip) result.push(line);
+							}
+							fs.writeFileSync(filePath, result.join('\n'));
+							execSync(`git add "${f}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+							resolved++;
+							out?.appendLine(`[Swarm] LLM resolved: ${f}`);
+						}
+					} catch (err: any) {
+						out?.appendLine(`[Swarm] LLM failed for ${f}: ${err.message}`);
+					}
+				}
+
+				if (resolved === this.conflictedFiles.length) {
+					// All resolved — auto-complete
+					try {
+						execSync(`git commit -m "swarm merge: ${this.mergeBranchName} (LLM resolved)" --no-verify`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+						const branch = this.getCurrentBranch();
+						if (branch) {
+							try { execSync(`git push origin "${branch}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }); } catch {}
+						}
+						this.mergeInProgress = false;
+						vscode.window.showInformationMessage(`✅ LLM resolved ${resolved} conflict(s) and merged!`);
+					} catch {}
+				} else {
+					vscode.window.showWarningMessage(`LLM resolved ${resolved}/${this.conflictedFiles.length}. Remaining need manual resolution.`);
+				}
+				this.refresh();
+			}
+		);
 	}
 
 	private async switchBranch(node: SwarmBranchNode): Promise<void> {
