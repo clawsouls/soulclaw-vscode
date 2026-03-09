@@ -325,7 +325,8 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			}
 			this.refresh();
 		} catch {
-			// Check for conflicts
+			// Auto-resolve non-content files before showing conflict UI
+			this.autoResolveNonContent(swarmDir, out);
 			this.refresh();
 			if (this.hasConflicts) {
 				this.mergeInProgress = true;
@@ -337,6 +338,27 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 				vscode.window.showErrorMessage('Merge failed.');
 			}
 		}
+	}
+
+	/** Auto-resolve config/binary files: keep "ours" for .soulscan/*, skip .age files */
+	private autoResolveNonContent(swarmDir: string, out?: any): void {
+		try {
+			const status = execSync('git status --porcelain', { cwd: swarmDir, encoding: 'utf8' });
+			const conflicted = status.split('\n')
+				.filter(l => l.startsWith('UU') || l.startsWith('AA') || l.startsWith('DD'))
+				.map(l => l.slice(3).trim());
+			
+			for (const f of conflicted) {
+				// Auto-resolve: config files → keep ours, binary .age → keep ours
+				if (f.includes('.soulscan/') || f.endsWith('.age') || f === 'soul.json' || f === 'README.md') {
+					try {
+						execSync(`git checkout --ours "${f}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+						execSync(`git add "${f}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+						out?.appendLine(`[Swarm] auto-resolved (keep ours): ${f}`);
+					} catch {}
+				}
+			}
+		} catch {}
 	}
 
 	private async handleMergeConflicts(swarmDir: string, out?: any): Promise<void> {
