@@ -119,18 +119,6 @@ export class SoulClawEngine extends EventEmitter {
 				model: this.llm.model,
 			});
 
-			// Build message history for LLM with token budget
-			const history = this.sessions.getMessages(key);
-			const systemTokens = estimateTokens(systemPrompt);
-			const toolsTokens = tools ? estimateTokens(JSON.stringify(tools)) : 0;
-			const historyBudget = MAX_CONTEXT_TOKENS - systemTokens - toolsTokens;
-			this.log(`Token estimate — system: ${systemTokens}, tools: ${toolsTokens}, history budget: ${historyBudget}`);
-
-			const llmMessages: LLMMessage[] = [
-				{ role: 'system', content: systemPrompt },
-				...this.truncateHistory(history, undefined, historyBudget),
-			];
-
 			// Get tools based on provider, filtered by user allowlist
 			let tools: any[] | undefined;
 			if (true) { // All providers support tools now
@@ -146,6 +134,18 @@ export class SoulClawEngine extends EventEmitter {
 					: allTools;
 				if (tools.length === 0) tools = undefined;
 			}
+
+			// Build message history for LLM with token budget
+			const history = this.sessions.getMessages(key);
+			const systemTokens = estimateTokens(systemPrompt);
+			const toolsTokens = tools ? estimateTokens(JSON.stringify(tools)) : 0;
+			const historyBudget = MAX_CONTEXT_TOKENS - systemTokens - toolsTokens;
+			this.log(`Token estimate — system: ${systemTokens}, tools: ${toolsTokens}, history budget: ${historyBudget}`);
+
+			const llmMessages: LLMMessage[] = [
+				{ role: 'system', content: systemPrompt },
+				...this.truncateHistory(history, undefined, historyBudget),
+			];
 
 			// Agentic loop — keep running until we get a text response (not tool calls)
 			const MAX_TOOL_ROUNDS = 10;
