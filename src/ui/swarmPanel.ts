@@ -191,8 +191,16 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		try {
 			if (repoUrl) {
 				execSync(`git clone "${repoUrl}" .`, { cwd: swarmDir, encoding: 'utf8' });
+				// Ensure main branch exists (empty repo case)
+				const branches = execSync('git branch -a', { cwd: swarmDir, encoding: 'utf8' });
+				if (!branches.includes('main') && !branches.includes('master')) {
+					// Empty repo or no main — create initial main
+					fs.writeFileSync(path.join(swarmDir, 'README.md'), '# Swarm Memory\n');
+					const sep = process.platform === 'win32' ? ';' : '&&';
+					execSync(`git checkout -b main ${sep} git add -A ${sep} git commit -m "init: swarm memory" ${sep} git push origin main`, { cwd: swarmDir, encoding: 'utf8' });
+				}
 			} else {
-				execSync('git init', { cwd: swarmDir, encoding: 'utf8' });
+				execSync('git init -b main', { cwd: swarmDir, encoding: 'utf8' });
 				// Create initial soul.json so CLI works
 				const ws = vscode.workspace.workspaceFolders;
 				const srcSoul = ws ? path.join(ws[0].uri.fsPath, 'soul.json') : null;
@@ -202,9 +210,9 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 				} else {
 					fs.writeFileSync(dstSoul, JSON.stringify({ specVersion: "0.5", name: "swarm-memory" }, null, 2));
 				}
-				// Initial commit
+				// Initial commit on main
 				const sep = process.platform === 'win32' ? ';' : '&&';
-				execSync(`git add -A ${sep} git commit -m "init swarm memory"`, { cwd: swarmDir, encoding: 'utf8' });
+				execSync(`git add -A ${sep} git commit -m "init: swarm memory"`, { cwd: swarmDir, encoding: 'utf8' });
 			}
 
 			// Ask to join as agent immediately
