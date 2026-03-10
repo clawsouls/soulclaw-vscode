@@ -1,6 +1,10 @@
 # SoulClaw — Soul-Powered AI Agent
 
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/clawsouls.soulclaw-vscode?label=VS%20Marketplace&color=blue)](https://marketplace.visualstudio.com/items?itemName=clawsouls.soulclaw-vscode)
+
 Zero-setup AI agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools — powered by [OpenClaw](https://github.com/openclaw/openclaw).
+
+**[Install from VS Marketplace](https://marketplace.visualstudio.com/items?itemName=clawsouls.soulclaw-vscode)** | [Soul Registry](https://clawsouls.ai) | [CLI Version](https://soulclaw.sh) | [Docs](https://docs.clawsouls.ai)
 
 > ⚠️ **Early Preview** — Under active development. Expect breaking changes.
 
