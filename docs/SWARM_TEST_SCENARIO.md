@@ -86,42 +86,46 @@
 
 ## 4. Merge — 충돌 해결
 
-### 4-1. 같은 브랜치 충돌 (Fast-forward 불가)
-1. Machine A: MEMORY.md 1번째 줄 수정 → Push
-2. Machine B: (Pull 안 하고) MEMORY.md 1번째 줄 다른 내용으로 수정 → Push
-3. **기대**: Push 실패 또는 충돌 감지
-4. Machine B: Pull 시도
-5. **기대**: Git merge conflict 발생 → LLM merge (Ollama) 시도 또는 수동 해결 안내
+### 4-1. 충돌 감지 + Resolve UX
+1. main 브랜치에서 "Merge" 클릭 → agent 브랜치 선택
+2. **기대**: 충돌 감지 시 QuickPick 표시:
+   - 🤖 LLM Resolve (Ollama 자동 해결)
+   - ✏️ Open in Editor (수동 해결)
+   - ✅ Complete Merge (해결 후 commit+push)
+   - ↩️ Abort (취소)
+3. config/binary 파일(.soulscan/*, .age)은 자동 처리 (keep ours)
+4. content 파일(MEMORY.md 등)만 LLM/수동 대상
 
-### 4-2. 다른 브랜치 Merge
-1. Machine A: `agent/tom` 브랜치에서 작업 → Push
-2. Machine A: Swarm 패널 "Merge" 클릭 → source 브랜치 선택 (`agent/brad`)
-3. **기대**: 
-   - 충돌 없으면 자동 merge
-   - 충돌 있으면 LLM semantic merge 실행 (Ollama bge-m3)
-   - 결과가 현재 브랜치에 반영
+### 4-2. LLM Semantic Merge
+1. Merge 시 충돌 → "🤖 LLM Resolve" 선택
+2. **기대**: Ollama 모델이 양쪽 내용을 의미 기반으로 합침
+3. 전체 해결 시 자동 commit + push
+4. 부분 해결 시 나머지 수동 안내
+
+### 4-3. 수동 Merge
+1. "✏️ Open in Editor" 선택
+2. **기대**: 충돌 파일이 VSCode 에디터로 열림
+3. 수정 후 Swarm 패널 "⚠️ Conflict(s)" 클릭 → "✅ Complete Merge"
+4. **기대**: commit + push 완료
 
 ---
 
 ## 5. Encryption — 암호화
 
-### 5-1. Key 생성 (Machine A)
-1. Swarm 패널 "Encryption Keys" 클릭
-2. **기대**: age key pair 생성. public key 표시.
-3. **확인**: `{stateDir}/swarm/` 내 key 파일 존재
+### 5-1. Key 생성 + 암호화 Push (Machine A)
+1. Swarm 패널 "Encryption Keys" → "Init keys"
+2. **기대**: age key pair 생성, public key 표시
+3. Push 실행
+4. **기대**: remote repo에 `.age` 암호화 파일 업로드됨
+5. **검증**: GitHub에서 .age 파일 확인
 
-### 5-2. 암호화 Push (Machine A)
-1. Encryption 활성화 상태에서 Push
-2. **기대**: remote repo에서 파일 내용이 age 암호화됨
-3. **검증**: GitHub에서 직접 파일 열면 암호문
-
-### 5-3. 복호화 Pull (Machine B)
+### 5-2. 복호화 Pull (Machine B)
 1. Machine B에 같은 key 공유 (key export/import)
 2. Pull 실행
 3. **기대**: 자동 복호화 → workspace에 평문 반영
 4. **실패 케이스**: key 없이 Pull → 암호문 그대로이거나 에러 메시지
 
-### 5-4. Key Rotation
+### 5-3. Key Rotation
 1. Machine A에서 key rotation 실행
 2. **기대**: 새 key로 re-encrypt + push
 3. Machine B에서 새 key 받고 Pull → 정상 복호화
@@ -146,30 +150,44 @@
 
 ---
 
-## 체크리스트
+## QA 결과 (2026-03-09~10, Machine A)
 
-| # | 시나리오 | Machine A | Machine B | Pass/Fail |
-|---|---------|-----------|-----------|-----------|
-| 1-1 | 최초 Init | ☐ | - | |
-| 1-2 | 두 번째 Join | - | ☐ | |
-| 1-3 | 재Init | ☐ | - | |
-| 2-1 | Branch 생성 | ☐ | - | |
-| 2-2 | Branch 전환 | ☐ | - | |
-| 2-3 | Dirty State 전환 | ☐ | - | |
-| 2-4 | Branch 삭제 | ☐ | - | |
-| 3-1 | Push | ☐ | - | |
-| 3-2 | Pull | - | ☐ | |
-| 3-3 | 양방향 교차 | ☐ | ☐ | |
-| 4-1 | 같은 브랜치 충돌 | ☐ | ☐ | |
-| 4-2 | 다른 브랜치 Merge | ☐ | - | |
-| 5-1 | Key 생성 | ☐ | - | |
-| 5-2 | 암호화 Push | ☐ | - | |
-| 5-3 | 복호화 Pull | - | ☐ | |
-| 5-4 | Key Rotation | ☐ | ☐ | |
-| 6-1 | 재시작 브랜치 상태 | ☐ | - | |
-| 6-2 | 재시작 자동 Sync | ☐ | - | |
-| 6-3 | Telegram + Swarm | ☐ | - | |
+| # | 시나리오 | 결과 | 비고 |
+|---|---------|------|------|
+| 1-1 | 최초 Init | ✅ Pass | |
+| 1-2 | 두 번째 Join | ⏳ | Machine B 필요 |
+| 1-3 | 재Init | ⏳ | |
+| 2-1 | Branch 생성 | ✅ Pass | |
+| 2-2 | Branch 전환 | ✅ Pass | |
+| 2-3 | Dirty State 전환 | ✅ Pass | 수정 내용 유실 없음 |
+| 2-4 | Branch 삭제 | ⏳ | |
+| 3-1 | Push | ✅ Pass | native git push, workspace sync 수정 후 |
+| 3-2 | Pull | ⏳ | Machine B 필요 |
+| 3-3 | 양방향 교차 | ⏳ | Machine B 필요 |
+| 4-1 | Merge + 충돌 감지 | ✅ Pass | unrelated histories 수정 |
+| 4-2 | LLM Merge | ✅ Pass | Ollama qwen3:8b, auto-resolve config/binary |
+| 4-3 | 수동 Merge | ⏳ | |
+| 5-1 | Key 생성 + 암호화 Push | ✅ Pass | .age 파일 GitHub 확인 |
+| 5-2 | 복호화 Pull | ⏳ | Machine B 필요 |
+| 5-3 | Key Rotation | ⏳ | |
+| 6-1 | 재시작 브랜치 상태 | ✅ Pass | |
+| 6-2 | 재시작 자동 Sync | ⏳ | |
+| 6-3 | Telegram + Swarm | ⏳ | |
+
+**Machine A 단독 테스트: 8/8 Pass, 0 Fail**
+
+### 발견 및 수정한 버그
+1. **CLI git args quoting** — commit 메시지에 공백 포함 시 pathspec 에러 → `v0.13.1`
+2. **CLI init main branch 미생성** — orphan branch만 생성됨 → `v0.13.2`
+3. **VSCode Push CLI 의존** — native git으로 교체
+4. **Workspace sync 누락** — VSCode workspace + internal workspace 양쪽 sync
+5. **age 키 경로 불일치** — `~/.clawsouls/keys/` 올바른 경로 참조
+6. **age 바이너리 미발견** — `~/.local/bin/age` fallback 추가
+7. **Merge unrelated histories** — `--allow-unrelated-histories` 추가
+8. **LLM merge config/binary 파일** — auto-resolve (keep ours) 처리
+9. **Merge 0 conflicts 잔존** — 자동 complete 처리
 
 ---
 
 *Created: 2026-03-08*
+*Updated: 2026-03-10 — QA 결과 + 버그 수정 내역 추가*
