@@ -74,6 +74,15 @@ Full-featured chat with streaming, markdown rendering, code blocks, and persiste
 - **Compare**: Diff two checkpoints to see what changed
 - **Restore**: Roll back to a previous state
 
+### 🔍 SoulScan
+
+- **Auto-scan on save**: Scans soul files automatically when you save
+- **Sidebar panel**: View scan results grouped by category (Security, PII, Quality)
+- **58 security rules**: Prompt injection (8 languages), code execution, XSS, secrets, PII detection
+- **Inline diagnostics**: Warnings appear directly in your editor
+- **Scoring**: 0-100 score with 5 risk levels (Verified → Blocked)
+- **Run manually**: Click "Run SoulScan" in the sidebar panel
+
 ### 🐝 Swarm Memory
 
 - **Init/Join**: Create or join a shared swarm repository
