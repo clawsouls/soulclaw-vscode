@@ -551,7 +551,7 @@ Merge these two versions intelligently:
 
 	private async switchBranch(node: SwarmBranchNode): Promise<void> {
 		const swarmDir = this.getSwarmDir();
-		const out = globalThis.__soulclawOutput;
+		const out = (globalThis as any).__soulclawOutput;
 
 		try {
 			out?.appendLine(`[Swarm] switchBranch: checking out "${node.branch.name}" in ${swarmDir}`);
@@ -603,7 +603,7 @@ Merge these two versions intelligently:
 	}
 
 	private async pullWithSync(): Promise<void> {
-		const out = globalThis.__soulclawOutput;
+		const out = (globalThis as any).__soulclawOutput;
 		await this.runCli('swarm pull');
 		const swarmDir = this.getSwarmDir();
 		this.syncSwarmToWorkspace(swarmDir, out);

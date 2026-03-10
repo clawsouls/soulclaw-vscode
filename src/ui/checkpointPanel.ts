@@ -12,8 +12,8 @@ interface CheckpointInfo {
 	score?: number;
 }
 
-export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNode> {
-	private _onDidChangeTreeData = new vscode.EventEmitter<CheckpointNode | undefined | null | void>();
+export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNode | CheckpointActionNode> {
+	private _onDidChangeTreeData = new vscode.EventEmitter<CheckpointNode | CheckpointActionNode | undefined | null | void>();
 	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
 	private checkpoints: CheckpointInfo[] = [];
@@ -34,7 +34,7 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		this._onDidChangeTreeData.fire();
 	}
 
-	getTreeItem(element: CheckpointNode): vscode.TreeItem {
+	getTreeItem(element: CheckpointNode | CheckpointActionNode): vscode.TreeItem {
 		return element;
 	}
 

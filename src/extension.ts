@@ -220,12 +220,12 @@ export async function activate(context: vscode.ExtensionContext) {
 						const response = await engine.sendMessage(text);
 						outputChannel.appendLine(`[telegram] engine response (${response.length} chars): ${response.slice(0, 200)}`);
 						if (response) {
-							const sent = await telegram.send(response);
+							const sent = await telegram!.send(response);
 							outputChannel.appendLine(`[telegram] relay to telegram: ${sent ? 'ok' : 'FAILED'}`);
 						}
 					} catch (err: any) {
 						outputChannel.appendLine(`[telegram] engine error: ${err.message}`);
-						try { await telegram.send(`⚠️ Error: ${err.message}`); } catch {}
+						try { await telegram!.send(`⚠️ Error: ${err.message}`); } catch {}
 					}
 				});
 				(globalThis as any).__soulclawTelegram = telegram;

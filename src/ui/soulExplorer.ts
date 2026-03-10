@@ -18,6 +18,7 @@ interface SoulSummary {
 	scanStatus: string;
 	version: string;
 	license: string;
+	author: string;
 	files: Record<string, string>;
 }
 
