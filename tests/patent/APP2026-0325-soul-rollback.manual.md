@@ -53,34 +53,57 @@ with a hash-mismatch warning.
 
 ---
 
-## § Component ② — History management
+## § Component ② — Checkpoint history creation and management
 
-**Goal:** checkpoints accumulate in time-ordered history, and the
-history is pruned to `MAX_CHECKPOINT_HISTORY` = 50.
+**Goal (BLT spec, claim 1 step 1):** *복수의 체크포인트 이력* —
+multiple checkpoints accumulate in time-ordered history, indexed
+by timestamp and rendered via the TreeDataProvider.
 
-1. With the scratch workspace, create **52 checkpoints** in a row
-   (script it or use a heartbeat). Labels `auto-1` … `auto-52`.
-2. After the 52nd create, inspect:
+1. In the scratch workspace, create **5** checkpoints with
+   distinct labels (`state-1` … `state-5`), spaced ~5 seconds
+   apart so the ISO-8601 ids differ.
+2. Inspect on disk:
 
-        ls .clawsouls/checkpoints/ | wc -l
+        ls -1 .clawsouls/checkpoints/ | sort
 
-   **Expected:** exactly 50 directories. The two oldest
-   (`auto-1`, `auto-2`) are removed from disk.
+   **Expected:** 5 directories, chronologically ordered. Each
+   contains a `checkpoint.json` with `label`, `timestamp`, `id`,
+   `files`, `hashes`, `score`.
 3. Open the Checkpoints panel.
 
-   **Expected:** the tree shows 50 entries in newest-first order.
-   Newest (`auto-52`) at the top.
+   **Expected:** the tree renders all 5 entries in **newest-first**
+   order. Description text shows `<date> · <fileCount> files · <✅/⚠️/❌>
+   <score>` per the `CheckpointNode` renderer in
+   `checkpointPanel.ts` (see BLT evidence §3-4).
 
-**Negative test:** corrupt one checkpoint dir (delete
-`checkpoint.json` but leave other files). The `loadCheckpoints()`
-walker must skip it without throwing — the other 49 still render.
+**Negative test (corrupt entry is skipped):** delete
+`checkpoint.json` from one checkpoint dir but leave the other
+files. `loadCheckpoints()` must skip it without throwing — the
+other 4 still render.
+
+(The `MAX_CHECKPOINT_HISTORY = 50` retention cap is an implementation
+detail not required by the claim; it is verified separately in the
+"Regression checks" section below.)
 
 ---
 
-## § Component ③ — Multi-layer contamination scan
+## § Component ③ — Multi-layer contamination-detection pipeline
 
-This is the component the automated test covers. The
-VS-Code-visible verification:
+**Goal (BLT spec, claim 1 step 2):** *적어도 하나 이상의 감지
+계층을 포함하는 다층 오염 감지 파이프라인을 실행* — run the
+multi-layer detection pipeline. The current implementation exposes
+**four** layers, matching the Marketplace README statement
+"Run 4-layer contamination detection on any checkpoint":
+
+| # | Layer | Source | When active |
+|---|-------|--------|-------------|
+| 1 | SECURITY (53 rules) | `SECURITY_RULES` regex battery | always |
+| 2 | PII (2 rules) | `PII_RULES` regex battery | always |
+| 3 | QUALITY (11 rules) | structural checks on `soul.json` / `SOUL.md` | always |
+| 4 | INTEGRITY | SHA-256 match vs caller-provided `expectedHashes` | opt-in (checkpoint context) |
+
+(The automated test `soulscan.patent.test.ts` covers all four
+layers. This manual step verifies the VS-Code-visible side.)
 
 1. In the scratch workspace, open `SOUL.md` and paste the full
    contents of `tests/patent/fixtures/contaminated-soul/SOUL.md`
@@ -88,12 +111,27 @@ VS-Code-visible verification:
 2. In the SoulScan panel, click **"Run Scan"**.
 
    **Expected:**
-   - The result header shows three layer counts:
-     Security (≥3), PII (≥2), Quality (≥1).
+   - The result header shows four layer counts:
+     Security (≥3), PII (≥2), Quality (≥1), Integrity (0 or ≥1
+     depending on whether the scan was invoked with checkpoint
+     context).
    - Each issue row shows the correct category badge
-     (SEC / PII / QUA). No SEC rule should render under PII.
+     (SEC / PII / QUA / INT). Rule-id prefix must match the
+     category — verified by the automated multi-layer separation
+     test.
 3. Note the `score` — it should drop well below 90 (no longer
    A-band).
+
+**Integrity layer sub-test:** from a terminal in the scratch
+workspace, run:
+
+        npx tsx -e "const s = require('./out/engine/soulscan'); \
+            console.log(s.scanSoulFiles('.', { expectedHashes: { \
+            'SOUL.md': '0'.repeat(64) } }).categories);"
+
+   **Expected:** `integrity: 1` in the printed `categories`
+   object. This proves the opt-in 4th layer is wired up and
+   fires on hash mismatch.
 
 ---
 
@@ -113,38 +151,65 @@ checkpoint to be flagged as "not a safe restore anchor".
 
 ---
 
-## § Component ⑤ — First-contamination identification
+## § Component ⑤ — First-contamination point identification
 
-**Goal:** the extension walks history newest-first and identifies
-the most recent contaminated checkpoint, stopping at the first
-clean anchor.
+**Goal (BLT spec, claim 1 step 3a):** *오염이 최초로 발생한 시점을
+식별* — identify the point at which contamination first appeared.
+The BLT evidence maps this to the `diffCheckpoint()` command which
+renders `vscode.diff(cpUri, curUri)` — the reviewer visually
+locates the first point where the content became contaminated by
+diffing neighboring checkpoints in history.
 
-1. Setup a deliberate timeline (all in one scratch workspace):
+1. Set up a deliberate timeline (all in one scratch workspace):
 
    1. Start clean. Checkpoint `t0-clean`.
    2. Paste contamination. Checkpoint `t1-dirty`.
    3. Edit more contamination. Checkpoint `t2-dirtier`.
    4. (Do NOT clean up between t1 and t2.)
 
-2. Run the Command Palette: `ClawSouls: Checkpoint — Auto-Restore`.
-3. Before it restores, the extension should log / notify:
+2. In the Checkpoints panel, right-click `t0-clean` → **"Compare
+   with current"** (or invoke `clawsouls.checkpoint.diff` from the
+   palette with `t0-clean` selected). Repeat for `t1-dirty`.
 
-   **Expected:** "First contamination detected at `t1-dirty`.
-   Restoring from most recent clean anchor: `t0-clean`."
+   **Expected:**
+   - `vscode.diff` opens side-by-side with the workspace.
+   - Diff vs `t0-clean` shows all contamination lines added.
+   - Diff vs `t1-dirty` shows only the additional contamination
+     from step 3.
+   - By scanning these diffs the reviewer identifies `t1-dirty`
+     as the first contaminated checkpoint and `t0-clean` as the
+     most recent checkpoint **직전** (immediately preceding) the
+     identified contamination.
 
-4. If the extension jumps over `t1-dirty` and `t2-dirtier`
-   without naming them, component ⑤ FAILS — the walk is not
-   identifying the *first* contamination, only the restore
-   target.
+3. Auto-restore path: run `ClawSouls: Checkpoint — Auto-Restore`
+   from the palette.
+
+   **Expected:** the extension selects `t0-clean` as the restore
+   target — i.e. the checkpoint immediately preceding `t1-dirty`
+   (the first contamination point). If it instead restores to
+   `t2-dirtier` or silently falls through to the newest
+   contaminated checkpoint, component ⑤ FAILS.
+
+**Note on terminology:** the BLT spec says "식별된 시점 **직전의**
+체크포인트" — the restore target is defined relative to the
+identified contamination point, not by picking the "newest clean
+anchor" in absolute terms. The two coincide whenever history is
+continuously clean → dirty; if you intentionally produce a
+clean → dirty → clean → dirty timeline, the patent spec restores
+to the checkpoint directly before the *earliest* dirty one, not
+the latest-clean. Document any deviation in the PASS/FAIL row.
 
 ---
 
-## § Component ⑥ — Clean-checkpoint restore
+## § Component ⑥ — Restore from the checkpoint immediately preceding the identified point
 
-**Goal:** auto-restore selects the newest checkpoint whose
-`scanScore >= CLEAN_THRESHOLD` (75) and replaces the workspace
-soul files with its contents. Hashes are verified. A
-pre-restore safety snapshot is taken.
+**Goal (BLT spec, claim 1 step 3b):** *식별된 시점 직전의
+체크포인트를 기준으로 에이전트 데이터를 복원* — restore based on
+the checkpoint **immediately preceding** the identified
+contamination point (as determined in §⑤). The implementation also
+verifies SHA-256 hashes before overwriting, and writes a
+pre-restore safety snapshot — both are hardening additions, not
+deviations from the claim.
 
 1. Continue from ⑤ — with `t0-clean`, `t1-dirty`, `t2-dirtier`
    in history.
@@ -183,8 +248,12 @@ pre-restore safety snapshot is taken.
 - **Hash verification present**: delete / corrupt a single byte
   in any checkpoint file and attempt restore. Restore must
   refuse.
-- **Retention cap enforced**: confirm 52-checkpoint scenario
-  leaves exactly 50 on disk.
+- **Retention cap enforced (MAX_CHECKPOINT_HISTORY = 50)**:
+  implementation-detail regression, not a claim requirement.
+  Create **52** checkpoints (script it or use a heartbeat, labels
+  `auto-1` … `auto-52`). Run `ls -1 .clawsouls/checkpoints/ | wc -l`
+  — must return exactly 50. The two oldest (`auto-1`, `auto-2`)
+  dropped on disk.
 - **Pre-restore safety snapshot**: the `createCheckpointSilent`
   path MUST run before restore overwrites files.
 - **Restart failure surfaced**: confirm the warning banner
