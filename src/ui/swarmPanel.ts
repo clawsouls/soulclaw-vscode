@@ -505,9 +505,15 @@ Merge these two versions intelligently:
 - Output ONLY the merged content, no explanations`;
 
 					try {
+						// SECURITY: pass the request body through curl's stdin via
+						// `--data-binary @-` instead of interpolating JSON into the
+						// shell command. Raw interpolation would let stray `'` chars
+						// in conflict markers break out of the single-quoted string
+						// and inject shell commands.
+						const body = JSON.stringify({ model, prompt, stream: false });
 						const resp = JSON.parse(execSync(
-							`curl -s ${ollamaUrl}/api/generate -d '${JSON.stringify({ model, prompt, stream: false })}'`,
-							{ encoding: 'utf8', timeout: 60000 }
+							`curl -s ${ollamaUrl}/api/generate --data-binary @-`,
+							{ input: body, encoding: 'utf8', timeout: 60000 }
 						));
 						const merged = resp.response?.trim();
 						if (merged) {
