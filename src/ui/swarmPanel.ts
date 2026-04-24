@@ -55,14 +55,28 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		}, 5 * 60 * 1000);
 		context.subscriptions.push({ dispose: () => clearInterval(heartbeatInterval) });
 
-		// Auto-refresh on swarm directory changes (debounced)
+		// Auto-refresh on swarm directory changes (debounced).
+		// Skip internal git/config directories — every git operation touches
+		// .git/ so the watcher would otherwise fire on every tick and keep
+		// the tree view reloading mid-merge.
 		const swarmDir = this.getSwarmDir();
 		let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+		const shouldIgnore = (uri: vscode.Uri): boolean => {
+			const rel = path.relative(swarmDir, uri.fsPath).split(path.sep).join('/');
+			return (
+				rel.startsWith('.git/') ||
+				rel === '.git' ||
+				rel.startsWith('.soulscan/') ||
+				rel === '.soulscan' ||
+				rel.endsWith('.age')
+			);
+		};
 		try {
 			const watcher = vscode.workspace.createFileSystemWatcher(
 				new vscode.RelativePattern(swarmDir, '**/*')
 			);
-			const debouncedRefresh = () => {
+			const debouncedRefresh = (uri: vscode.Uri) => {
+				if (shouldIgnore(uri)) return;
 				if (refreshTimer) clearTimeout(refreshTimer);
 				refreshTimer = setTimeout(() => this.refresh(), 500);
 			};
@@ -193,13 +207,22 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		try {
 			if (repoUrl) {
 				execSync(`git clone "${repoUrl}" .`, { cwd: swarmDir, encoding: 'utf8' });
-				// Ensure main branch exists (empty repo case)
+				// Ensure main branch exists (empty repo case). Step-by-step
+				// so an auth prompt on push doesn't bring the whole chain
+				// down mid-shell-chain.
 				const branches = execSync('git branch -a', { cwd: swarmDir, encoding: 'utf8' });
 				if (!branches.includes('main') && !branches.includes('master')) {
-					// Empty repo or no main — create initial main
 					fs.writeFileSync(path.join(swarmDir, 'README.md'), '# Swarm Memory\n');
-					const sep = process.platform === 'win32' ? ';' : '&&';
-					execSync(`git checkout -b main ${sep} git add -A ${sep} git commit -m "init: swarm memory" ${sep} git push origin main`, { cwd: swarmDir, encoding: 'utf8' });
+					execSync('git checkout -b main', { cwd: swarmDir, encoding: 'utf8' });
+					execSync('git add -A', { cwd: swarmDir, encoding: 'utf8' });
+					execSync('git commit -m "init: swarm memory" --no-verify', { cwd: swarmDir, encoding: 'utf8' });
+					try {
+						execSync('git push origin main', { cwd: swarmDir, encoding: 'utf8' });
+					} catch (pushErr: any) {
+						vscode.window.showWarningMessage(
+							`Swarm Memory initialized locally. Remote push failed (${pushErr?.message?.slice(0, 80) ?? 'auth or network issue'}) — retry with "Push" later.`
+						);
+					}
 				}
 			} else {
 				execSync('git init -b main', { cwd: swarmDir, encoding: 'utf8' });
@@ -225,11 +248,19 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			});
 			if (agentId) {
 				const agentBranch = agentId.startsWith('agent/') ? agentId : `agent/${agentId}`;
+				// `git checkout -b` fails for two reasons: branch already
+				// exists (common + recoverable) or something else (dirty
+				// tree, bad ref, etc.). Only fall through to plain checkout
+				// when the error is "already exists"; rethrow anything else.
 				try {
-					execSync(`git checkout -b "${agentBranch}"`, { cwd: swarmDir, encoding: 'utf8' });
-				} catch {
-					// Branch may already exist
-					execSync(`git checkout "${agentBranch}"`, { cwd: swarmDir, encoding: 'utf8' });
+					execSync(`git checkout -b "${agentBranch}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+				} catch (err: any) {
+					const msg = String(err?.stderr ?? err?.message ?? err);
+					if (/already exists/i.test(msg)) {
+						execSync(`git checkout "${agentBranch}"`, { cwd: swarmDir, encoding: 'utf8' });
+					} else {
+						throw err;
+					}
 				}
 				vscode.window.showInformationMessage(`✅ Swarm Memory initialized + joined as "${agentBranch}"`);
 			} else {
@@ -259,10 +290,13 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		const branchName = input.startsWith('agent/') ? input : `agent/${input}`;
 
 		try {
+			// Same error-classification as initSwarm — only accept
+			// "already exists" as a fall-through case.
 			try {
-				execSync(`git checkout -b "${branchName}"`, { cwd: swarmDir, encoding: 'utf8' });
-			} catch {
-				// Branch already exists — switch to it
+				execSync(`git checkout -b "${branchName}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			} catch (err: any) {
+				const msg = String(err?.stderr ?? err?.message ?? err);
+				if (!/already exists/i.test(msg)) throw err;
 				execSync(`git checkout "${branchName}"`, { cwd: swarmDir, encoding: 'utf8' });
 			}
 			// Write CLI-compatible swarm config
@@ -342,25 +376,46 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		}
 	}
 
-	/** Auto-resolve config/binary files: keep "ours" for .soulscan/*, skip .age files */
+	/**
+	 * Auto-resolve config/binary files: keep "ours" for .soulscan/*, skip
+	 * .age files, preserve local soul.json / README.md. This silently
+	 * drops the incoming branch's version of those files, so we log each
+	 * decision — if a later operator needs to audit why theirs was
+	 * discarded, the Swarm output channel carries the breadcrumb.
+	 */
 	private autoResolveNonContent(swarmDir: string, out?: any): void {
 		try {
 			const status = execSync('git status --porcelain', { cwd: swarmDir, encoding: 'utf8' });
 			const conflicted = status.split('\n')
 				.filter(l => l.startsWith('UU') || l.startsWith('AA') || l.startsWith('DD'))
 				.map(l => l.slice(3).trim());
-			
+
 			for (const f of conflicted) {
-				// Auto-resolve: config files → keep ours, binary .age → keep ours
-				if (f.includes('.soulscan/') || f.endsWith('.age') || f === 'soul.json' || f === 'README.md') {
-					try {
-						execSync(`git checkout --ours "${f}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
-						execSync(`git add "${f}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
-						out?.appendLine(`[Swarm] auto-resolved (keep ours): ${f}`);
-					} catch {}
+				if (!this.isNonContentFile(f)) continue;
+				try {
+					execSync(`git checkout --ours "${f}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+					execSync(`git add "${f}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+					out?.appendLine(`[Swarm] auto-resolved (keep ours, theirs discarded): ${f}`);
+				} catch (err: any) {
+					out?.appendLine(`[Swarm] auto-resolve failed for ${f}: ${err?.message ?? err}`);
 				}
 			}
 		} catch {}
+	}
+
+	/**
+	 * Central definition of "non-content" files that should be silently
+	 * auto-resolved during a merge instead of asking the LLM or the user.
+	 * Shared by {@link autoResolveNonContent} and {@link llmResolveConflicts}
+	 * so the two agree on which files are safe to keep-ours.
+	 */
+	private isNonContentFile(f: string): boolean {
+		return (
+			f.includes('.soulscan/') ||
+			f.endsWith('.age') ||
+			f === 'soul.json' ||
+			f === 'README.md'
+		);
 	}
 
 	private async handleMergeConflicts(swarmDir: string, out?: any): Promise<void> {
@@ -460,11 +515,14 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			{ location: vscode.ProgressLocation.Notification, title: 'LLM Merge', cancellable: false },
 			async (progress) => {
 				let resolved = 0;
-				const contentFiles = this.conflictedFiles.filter(f => 
-					!f.endsWith('.age') && !f.includes('.soulscan/') && f !== 'soul.json' && f !== 'README.md'
-				);
-				// Auto-resolve remaining non-content files
-				for (const f of this.conflictedFiles.filter(ff => !contentFiles.includes(ff))) {
+				// Use the shared non-content classifier so this matches
+				// autoResolveNonContent's behaviour exactly; the double-filter
+				// pattern we had before was redundant and easy to drift.
+				const contentFiles = this.conflictedFiles.filter(f => !this.isNonContentFile(f));
+				const nonContentFiles = this.conflictedFiles.filter(f => this.isNonContentFile(f));
+				// Auto-resolve remaining non-content files (may have survived
+				// the earlier autoResolveNonContent pass if they flipped back).
+				for (const f of nonContentFiles) {
 					try {
 						execSync(`git checkout --ours "${f}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 						execSync(`git add "${f}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
@@ -734,7 +792,15 @@ Merge these two versions intelligently:
 		}
 	}
 
-	/** Sync workspace memory files → swarm branch (before push) */
+	/**
+	 * Sync workspace memory files → swarm branch (before push).
+	 *
+	 * Symmetric to `syncSwarmToWorkspace`: files that no longer exist in
+	 * the workspace get removed from the swarm branch too, so stale
+	 * entries don't accumulate on remote. Previously this only ever
+	 * copied files, leaving orphaned memory entries on the swarm side
+	 * whenever a workspace memory file was deleted locally.
+	 */
 	private syncWorkspaceToSwarm(swarmDir: string, out?: any): void {
 		const { getWorkspaceDir } = require('../paths');
 		const internalWorkspace = getWorkspaceDir();
@@ -747,33 +813,60 @@ Merge these two versions intelligently:
 			if (vsDir !== internalWorkspace) sourceDirs.push(vsDir);
 		}
 
-		for (const workspaceDir of sourceDirs) {
-			// Copy MEMORY.md to swarm
-			const wsMemory = path.join(workspaceDir, 'MEMORY.md');
-			const swarmMemory = path.join(swarmDir, 'MEMORY.md');
-			if (fs.existsSync(wsMemory)) {
-				fs.copyFileSync(wsMemory, swarmMemory);
-				out?.appendLine(`[Swarm] copied MEMORY.md from ${workspaceDir}`);
-			}
+		// Pick the first source dir that actually contains memory data —
+		// that's the authoritative workspace for this sync pass. Falling
+		// back to the second dir if the first has nothing to copy keeps
+		// multi-root VS Code users working.
+		const authoritative = sourceDirs.find(d =>
+			fs.existsSync(path.join(d, 'MEMORY.md')) || fs.existsSync(path.join(d, 'memory'))
+		) ?? sourceDirs[0];
 
-			// Copy memory/ to swarm
-			const wsMemoryDir = path.join(workspaceDir, 'memory');
-			const swarmMemoryDir = path.join(swarmDir, 'memory');
-			if (fs.existsSync(wsMemoryDir)) {
-				fs.mkdirSync(swarmMemoryDir, { recursive: true });
-				for (const entry of fs.readdirSync(wsMemoryDir)) {
-					const src = path.join(wsMemoryDir, entry);
-					if (fs.statSync(src).isFile()) {
-						fs.copyFileSync(src, path.join(swarmMemoryDir, entry));
-					}
-				}
-				out?.appendLine(`[Swarm] copied memory/ from ${workspaceDir}`);
-			}
+		// Copy MEMORY.md — overwrite or delete to match authoritative source.
+		const wsMemory = path.join(authoritative, 'MEMORY.md');
+		const swarmMemory = path.join(swarmDir, 'MEMORY.md');
+		if (fs.existsSync(wsMemory)) {
+			fs.copyFileSync(wsMemory, swarmMemory);
+			out?.appendLine(`[Swarm] copied MEMORY.md from ${authoritative}`);
+		} else if (fs.existsSync(swarmMemory)) {
+			fs.unlinkSync(swarmMemory);
+			out?.appendLine(`[Swarm] removed stale MEMORY.md on swarm (no longer in workspace)`);
 		}
 
-		// Stage and commit
+		// Mirror memory/ — replace swarm's memory dir with the authoritative
+		// workspace copy so deletions propagate. Kept per-file rather than
+		// `rm -rf` then copy so the filesystem watcher inside `.git` isn't
+		// disrupted by a whole-directory reshuffle.
+		const wsMemoryDir = path.join(authoritative, 'memory');
+		const swarmMemoryDir = path.join(swarmDir, 'memory');
+		if (fs.existsSync(wsMemoryDir)) {
+			fs.mkdirSync(swarmMemoryDir, { recursive: true });
+			const wsEntries = new Set(
+				fs.readdirSync(wsMemoryDir).filter(e => fs.statSync(path.join(wsMemoryDir, e)).isFile())
+			);
+			// Delete swarm-side files that no longer exist in workspace.
+			if (fs.existsSync(swarmMemoryDir)) {
+				for (const entry of fs.readdirSync(swarmMemoryDir)) {
+					const swarmEntry = path.join(swarmMemoryDir, entry);
+					if (!fs.statSync(swarmEntry).isFile()) continue;
+					if (!wsEntries.has(entry)) {
+						fs.unlinkSync(swarmEntry);
+						out?.appendLine(`[Swarm] removed stale memory/${entry} on swarm`);
+					}
+				}
+			}
+			// Copy everything from workspace.
+			for (const entry of wsEntries) {
+				fs.copyFileSync(path.join(wsMemoryDir, entry), path.join(swarmMemoryDir, entry));
+			}
+			out?.appendLine(`[Swarm] copied memory/ from ${authoritative}`);
+		} else if (fs.existsSync(swarmMemoryDir)) {
+			fs.rmSync(swarmMemoryDir, { recursive: true, force: true });
+			out?.appendLine(`[Swarm] removed stale memory/ dir on swarm (no longer in workspace)`);
+		}
+
+		// Stage and commit (add catches deletions via `git add -A`).
 		try {
-			execSync('git add MEMORY.md memory/ 2>/dev/null; git diff --cached --quiet || git commit -m "sync workspace memory" --no-verify', 
+			execSync('git add -A MEMORY.md memory/ 2>/dev/null; git diff --cached --quiet || git commit -m "sync workspace memory" --no-verify',
 				{ cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 			out?.appendLine(`[Swarm] synced workspace → swarm`);
 		} catch {}
