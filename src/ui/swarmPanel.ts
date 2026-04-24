@@ -269,7 +269,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			this.refresh();
 			try { await vscode.commands.executeCommand('clawsouls.refreshStatusBar'); } catch {}
 		} catch (err: any) {
-			vscode.window.showErrorMessage(`Swarm Memory init failed: ${err.message}`);
+			vscode.window.showErrorMessage(`Swarm Memory init failed: ${sanitizeError(err)}`);
 		}
 	}
 
@@ -306,20 +306,35 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			const config = { agentBranch: branchName, initialized: true };
 			require('fs').writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-			// Ensure at least one commit exists (required for push)
+			// Ensure at least one commit exists (required for push).
+			let needsReadme = false;
 			try {
 				execSync('git log -1', { cwd: swarmDir, encoding: 'utf8' });
 			} catch {
-				// No commits yet — create initial commit
+				needsReadme = true;
 				const readmePath = require('path').join(swarmDir, 'README.md');
 				require('fs').writeFileSync(readmePath, `# Swarm Memory\n\nAgent: ${branchName}\n`);
 			}
-			execSync('git add -A && git commit -m "init: agent joined" --allow-empty', { cwd: swarmDir, encoding: 'utf8' });
+			// Stage only the specific files we just wrote (swarm config +
+			// optional initial README). Previously this used `git add -A`,
+			// which would sweep in any unrelated workspace-level changes
+			// the user hadn't yet committed and fold them into the
+			// "init: agent joined" commit. Scope the add so the commit
+			// stays focused.
+			execSync('git add .soulscan/swarm.json', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			if (needsReadme) {
+				execSync('git add README.md', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			}
+			// --allow-empty: on rejoin (branch already existed with up-to-date
+			// config), there may be nothing to commit; we still want the join
+			// message in the log as an audit event. --no-verify: we don't
+			// want user-side git hooks to block routine swarm housekeeping.
+			execSync('git commit -m "init: agent joined" --allow-empty --no-verify', { cwd: swarmDir, encoding: 'utf8' });
 			vscode.window.showInformationMessage(`✅ Joined as "${branchName}".`);
 			this.refresh();
 			try { await vscode.commands.executeCommand('clawsouls.refreshStatusBar'); } catch {}
 		} catch (err: any) {
-			vscode.window.showErrorMessage(`Join failed: ${err.message}`);
+			vscode.window.showErrorMessage(`Join failed: ${sanitizeError(err)}`);
 		}
 	}
 
@@ -478,7 +493,7 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 				out?.appendLine('[Swarm] merge completed');
 				this.refresh();
 			} catch (err: any) {
-				vscode.window.showErrorMessage(`Complete merge failed: ${err.message}`);
+				vscode.window.showErrorMessage(`Complete merge failed: ${sanitizeError(err)}`);
 			}
 
 		} else if (action.value === 'llm') {
@@ -590,12 +605,16 @@ Merge these two versions intelligently:
 							out?.appendLine(`[Swarm] LLM resolved: ${f}`);
 						}
 					} catch (err: any) {
-						out?.appendLine(`[Swarm] LLM failed for ${f}: ${err.message}`);
+						out?.appendLine(`[Swarm] LLM failed for ${f}: ${sanitizeError(err)}`);
 					}
 				}
 
-				if (resolved === this.conflictedFiles.length) {
-					// All resolved — auto-complete
+				// `resolved` increments in two places: the non-content
+				// auto-resolve loop above (keep-ours) and each LLM success
+				// below. Totalling them and comparing against the original
+				// conflict set makes the "all done" gate explicit.
+				const totalConflicts = nonContentFiles.length + contentFiles.length;
+				if (resolved === totalConflicts) {
 					try {
 						execSync(`git commit -m "swarm merge: ${this.mergeBranchName} (LLM resolved)" --no-verify`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 						const branch = this.getCurrentBranch();
@@ -606,7 +625,7 @@ Merge these two versions intelligently:
 						vscode.window.showInformationMessage(`✅ LLM resolved ${resolved} conflict(s) and merged!`);
 					} catch {}
 				} else {
-					vscode.window.showWarningMessage(`LLM resolved ${resolved}/${this.conflictedFiles.length}. Remaining need manual resolution.`);
+					vscode.window.showWarningMessage(`LLM resolved ${resolved}/${totalConflicts}. Remaining need manual resolution.`);
 				}
 				this.refresh();
 			}
@@ -661,8 +680,8 @@ Merge these two versions intelligently:
 			// Update status bar agent name
 			try { await vscode.commands.executeCommand('clawsouls.refreshStatusBar'); } catch {}
 		} catch (err: any) {
-			out?.appendLine(`[Swarm] switchBranch error: ${err.message}`);
-			vscode.window.showErrorMessage(`Switch failed: ${err.message}`);
+			out?.appendLine(`[Swarm] switchBranch error: ${sanitizeError(err)}`);
+			vscode.window.showErrorMessage(`Switch failed: ${sanitizeError(err)}`);
 		}
 	}
 
@@ -755,8 +774,8 @@ Merge these two versions intelligently:
 			out?.appendLine(`[Swarm] pushed to origin/${branch}`);
 			this.refresh();
 		} catch (err: any) {
-			vscode.window.showErrorMessage(`Push failed: ${err.message}`);
-			out?.appendLine(`[Swarm] push error: ${err.message}`);
+			vscode.window.showErrorMessage(`Push failed: ${sanitizeError(err)}`);
+			out?.appendLine(`[Swarm] push error: ${sanitizeError(err)}`);
 		}
 	}
 
@@ -891,7 +910,7 @@ Merge these two versions intelligently:
 			vscode.window.showInformationMessage(`Branch "${node.branch.name}" deleted.`);
 			this.refresh();
 		} catch (err: any) {
-			vscode.window.showErrorMessage(`Failed to delete branch: ${err.message}`);
+			vscode.window.showErrorMessage(`Failed to delete branch: ${sanitizeError(err)}`);
 		}
 	}
 
@@ -937,6 +956,13 @@ Merge these two versions intelligently:
 		// For pull and merge, also sync to workspace + restart engine
 		const needsSync = command === 'swarm pull' || command.startsWith('swarm merge');
 
+		// NOTE: terminal output is user-visible. Anything the underlying
+		// `npx clawsouls …` CLI prints — including git stderr with remote
+		// URLs, age key fingerprints, or auth failures — ends up in this
+		// pane. We avoid surfacing credentials here by keeping auth in
+		// git's credential helper (not embedded in remote URLs) and not
+		// passing tokens on the command line. If you add CLI flags that
+		// could carry secrets, redact before `terminal.sendText`.
 		const terminal = vscode.window.createTerminal('ClawSouls Swarm');
 		terminal.show();
 		const sep = process.platform === 'win32' ? ';' : '&&';
@@ -958,6 +984,30 @@ Merge these two versions intelligently:
 			terminal.sendText(`cd "${swarmDir}" ${sep} npx clawsouls ${command}`);
 		}
 	}
+}
+
+/**
+ * Scrub user-facing git error strings. `err.message` from execSync can
+ * contain:
+ *   - absolute file paths (user's home dir layout)
+ *   - the full git command we invoked (may include branch names we want
+ *     to hide or urls with embedded credentials)
+ *   - remote URLs of the form `https://user:token@host/...` when push
+ *     auth is embedded in the remote
+ * We trim these to reduce credential / sensitive-path leakage into the
+ * VS Code notification bubble.
+ */
+function sanitizeError(err: unknown): string {
+	const raw = String((err as { message?: string })?.message ?? err);
+	return raw
+		// strip credentials from inline URLs
+		.replace(/https?:\/\/[^@\s]+:[^@\s]+@/g, 'https://***:***@')
+		// collapse "Command failed: <huge-git-cmd>" preambles
+		.replace(/Command failed: [^\n]*\n?/, '')
+		// drop absolute home paths
+		.replace(new RegExp(require('os').homedir(), 'g'), '~')
+		.trim()
+		.slice(0, 400);
 }
 
 class SwarmBranchNode extends vscode.TreeItem {
