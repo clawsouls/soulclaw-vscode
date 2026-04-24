@@ -191,7 +191,10 @@ export function scanSoulFiles(workspaceDir: string): ScanResult {
 	const warnCount = issues.filter(i => i.severity === 'warning').length;
 	const infoCount = issues.filter(i => i.severity === 'info').length;
 	const score = Math.max(0, 100 - errorCount * 15 - warnCount * 5 - infoCount * 1);
-	const grade = score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : 'F';
+	// Grade bands aligned with WasmClaw's ScanResult grading (see
+	// wasmclaw@0.5.0 src/scan/scanner.ts) so the same persona lands in
+	// the same band whether scanned here or via the engine library.
+	const grade = score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 50 ? 'C' : score >= 25 ? 'D' : 'F';
 
 	const securityCount = issues.filter(i => i.category === 'security').length;
 	const qualityCount = issues.filter(i => i.category === 'quality').length;
