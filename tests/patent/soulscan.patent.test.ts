@@ -30,8 +30,43 @@ test('clean soul: zero security, zero PII, A-band score', () => {
 
 	assert.equal(r.categories.security, 0, 'expected no security findings on clean fixture');
 	assert.equal(r.categories.pii, 0, 'expected no PII findings on clean fixture');
+	assert.equal(r.categories.integrity, 0, 'expected no integrity findings when expectedHashes not provided');
 	assert.ok(r.score >= 90, `expected A-band (>=90), got ${r.score}`);
 	assert.equal(r.grade, 'A', `expected grade A, got ${r.grade}`);
+});
+
+test('integrity layer: no-op when expectedHashes not provided', () => {
+	const r = scanSoulFiles(CLEAN);
+	assert.equal(r.categories.integrity, 0);
+	assert.ok(!r.issues.some(i => i.rule.startsWith('INT')), 'INT* rule must not fire without expectedHashes');
+});
+
+test('integrity layer: fires INT001 on hash mismatch', () => {
+	// Pass a deliberately wrong expected hash for soul.json.
+	const r = scanSoulFiles(CLEAN, {
+		expectedHashes: {
+			'soul.json': '0'.repeat(64),
+			'SOUL.md': '0'.repeat(64),
+		},
+	});
+	assert.ok(r.categories.integrity >= 1, `expected >=1 INT finding, got ${r.categories.integrity}`);
+	const intIssues = r.issues.filter(i => i.category === 'integrity');
+	assert.ok(intIssues.every(i => i.rule === 'INT001'), 'integrity issues must use INT001');
+	assert.ok(intIssues.every(i => i.severity === 'error'), 'INT001 must be error severity');
+});
+
+test('integrity layer: passes when expected hash matches actual', () => {
+	// Compute real hashes of the clean fixture, then pass them back.
+	const soulJsonBytes = require('fs').readFileSync(path.join(CLEAN, 'soul.json'));
+	const soulMdBytes = require('fs').readFileSync(path.join(CLEAN, 'SOUL.md'));
+	const hash = (b: Buffer) => require('crypto').createHash('sha256').update(b).digest('hex');
+	const r = scanSoulFiles(CLEAN, {
+		expectedHashes: {
+			'soul.json': hash(soulJsonBytes),
+			'SOUL.md': hash(soulMdBytes),
+		},
+	});
+	assert.equal(r.categories.integrity, 0, 'integrity layer should not fire when hashes match');
 });
 
 test('contaminated soul: SEC layer fires', () => {
@@ -68,8 +103,8 @@ test('contaminated soul: QUA layer fires via structural checks', () => {
 	assert.ok(quaIssues.every(i => i.rule.startsWith('QUA')), 'all quality-category issues should have QUA* rule ids');
 });
 
-test('multi-layer separation: no SEC-category rule bleeds into PII, and vice versa', () => {
-	const r = scanSoulFiles(DIRTY);
+test('multi-layer separation: rule-id prefix must match category (SEC/PII/QUA/INT)', () => {
+	const r = scanSoulFiles(DIRTY, { expectedHashes: { 'SOUL.md': '0'.repeat(64) } });
 
 	for (const issue of r.issues) {
 		if (issue.rule.startsWith('SEC')) {
@@ -81,7 +116,18 @@ test('multi-layer separation: no SEC-category rule bleeds into PII, and vice ver
 		if (issue.rule.startsWith('QUA')) {
 			assert.equal(issue.category, 'quality', `QUA rule ${issue.rule} must be category=quality`);
 		}
+		if (issue.rule.startsWith('INT')) {
+			assert.equal(issue.category, 'integrity', `INT rule ${issue.rule} must be category=integrity`);
+		}
 	}
+});
+
+test('categories object always exposes all 4 layer counts (README "4-layer" contract)', () => {
+	const r = scanSoulFiles(CLEAN);
+	assert.equal(typeof r.categories.security, 'number');
+	assert.equal(typeof r.categories.pii, 'number');
+	assert.equal(typeof r.categories.quality, 'number');
+	assert.equal(typeof r.categories.integrity, 'number');
 });
 
 test('grade bands align with WasmClaw 0.5.0 (A>=90, B>=75, C>=50, D>=25, F<25)', () => {

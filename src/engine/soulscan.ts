@@ -1,31 +1,48 @@
 /**
  * Embedded SoulScan — lightweight soul file scanner.
  *
- * Implements the multi-layer contamination detection described in
- * patent application APP2026-0325 (SoulRollback). Each scan traverses
- * three independent rule layers over the same soul file corpus:
+ * Implements the "다층 오염 감지 파이프라인 (multi-layer contamination
+ * detection pipeline)" described in patent application APP2026-0325
+ * (SoulRollback), claim 1. Each scan can traverse up to four
+ * independent detection layers over the same soul file corpus:
  *
- *   1. SECURITY  (53 rules) — prompt injection, code execution, XSS,
- *                            exfiltration, secrets, harmful content
- *   2. PII       ( 2 rules) — phone, email
- *   3. QUALITY   (11 rules) — structural/schema checks on soul.json
- *                            and SOUL.md
+ *   1. SECURITY  (53 rules, pattern) — prompt injection, code
+ *                                      execution, XSS, exfiltration,
+ *                                      secrets, harmful content
+ *   2. PII       ( 2 rules, pattern) — phone, email
+ *   3. QUALITY   (11 rules, structural) — schema/shape checks on
+ *                                        soul.json and SOUL.md
+ *   4. INTEGRITY (hash, opt-in) — SHA-256 comparison against an
+ *                                caller-provided expected-hashes map;
+ *                                detects post-checkpoint tampering
+ *                                even when the content still passes
+ *                                the three pattern/structural layers
+ *
+ * Layers 1–3 always run. Layer 4 only activates when the caller
+ * passes `expectedHashes` — typically from a `checkpoint.json`
+ * manifest emitted by `checkpointPanel.createCheckpoint()`. The
+ * layer count in the returned `categories` object always includes
+ * all four keys (zero-filled when inactive) so downstream UI can
+ * render a consistent "4-layer" badge matching the Marketplace
+ * README statement "Run 4-layer contamination detection on any
+ * checkpoint".
  *
  * The layers are intentionally kept separate so a consumer can tell
  * *what kind* of contamination fired, which is what the patent's
- * "first-contaminated-checkpoint" walk relies on when deciding
- * whether a checkpoint is a viable clean anchor.
+ * "오염이 최초로 발생한 시점 식별" (identify first contamination
+ * point) step relies on when diffing two checkpoints.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 
 export interface ScanResult {
 	score: number;         // 0-100
 	grade: string;         // A/B/C/D/F
 	issues: ScanIssue[];
 	fileCount: number;
-	categories: { security: number; quality: number; pii: number };
+	categories: { security: number; quality: number; pii: number; integrity: number };
 }
 
 export interface ScanIssue {
@@ -34,7 +51,20 @@ export interface ScanIssue {
 	message: string;
 	file?: string;
 	line?: number;
-	category: 'security' | 'quality' | 'pii';
+	category: 'security' | 'quality' | 'pii' | 'integrity';
+}
+
+export interface ScanOptions {
+	/**
+	 * Expected SHA-256 (hex) per soul-file. Typically the `hashes` map
+	 * pulled from a checkpoint's `checkpoint.json`. When provided, the
+	 * integrity layer runs and emits `INT001` for any file whose
+	 * current bytes hash to a different value than the expected entry.
+	 * Files present in the workspace but not listed in the map are
+	 * ignored (integrity is an opt-in comparison, not a coverage
+	 * check).
+	 */
+	expectedHashes?: Record<string, string>;
 }
 
 /* ── Layer 1: Security rules (53, from scan-rules v1.2.0) ─────────────── */
@@ -120,7 +150,7 @@ const PII_RULES: { id: string; severity: 'error' | 'warning'; pattern: RegExp; m
 
 const SOUL_FILES = ['soul.json', 'SOUL.md', 'IDENTITY.md', 'AGENTS.md', 'STYLE.md', 'HEARTBEAT.md', 'USER.md', 'TOOLS.md', 'MEMORY.md', 'BOOTSTRAP.md'];
 
-export function scanSoulFiles(workspaceDir: string): ScanResult {
+export function scanSoulFiles(workspaceDir: string, options: ScanOptions = {}): ScanResult {
 	const issues: ScanIssue[] = [];
 	let fileCount = 0;
 	let soulJsonContent: string | null = null;
@@ -134,6 +164,27 @@ export function scanSoulFiles(workspaceDir: string): ScanResult {
 
 		const content = fs.readFileSync(filePath, 'utf-8');
 		const lines = content.split('\n');
+
+		// ── Layer 4: Integrity (opt-in, hash comparison) ──
+		// Only fires when the caller supplied an expected-hash map
+		// (typically from a checkpoint.json manifest). Detects
+		// post-checkpoint tampering that can't be caught by the
+		// three pattern/structural layers — e.g. a silent byte
+		// swap that changes semantics without introducing new
+		// tokens that match SEC/PII/QUA rules.
+		if (options.expectedHashes && Object.prototype.hasOwnProperty.call(options.expectedHashes, fileName)) {
+			const expected = options.expectedHashes[fileName];
+			const actual = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+			if (actual !== expected) {
+				issues.push({
+					severity: 'error',
+					rule: 'INT001',
+					message: `Hash mismatch — file modified since checkpoint (expected ${expected.slice(0, 12)}…, got ${actual.slice(0, 12)}…)`,
+					file: fileName,
+					category: 'integrity',
+				});
+			}
+		}
 
 		if (fileName === 'soul.json') { soulJsonContent = content; }
 		if (fileName === 'SOUL.md') { soulMdContent = content; soulMdExists = true; }
@@ -236,6 +287,18 @@ export function scanSoulFiles(workspaceDir: string): ScanResult {
 	const securityCount = issues.filter(i => i.category === 'security').length;
 	const qualityCount = issues.filter(i => i.category === 'quality').length;
 	const piiCount = issues.filter(i => i.category === 'pii').length;
+	const integrityCount = issues.filter(i => i.category === 'integrity').length;
 
-	return { score, grade, issues, fileCount, categories: { security: securityCount, quality: qualityCount, pii: piiCount } };
+	return {
+		score,
+		grade,
+		issues,
+		fileCount,
+		categories: {
+			security: securityCount,
+			quality: qualityCount,
+			pii: piiCount,
+			integrity: integrityCount,
+		},
+	};
 }
