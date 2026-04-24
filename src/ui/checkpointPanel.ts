@@ -9,8 +9,12 @@ interface CheckpointInfo {
 	label: string;
 	timestamp: string;
 	files: string[];
+	hashes?: Record<string, string>;
 	score?: number;
 }
+
+/** Minimum score for a checkpoint to be considered "clean" during auto-restore. */
+const CLEAN_THRESHOLD = 75;
 
 export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNode | CheckpointActionNode> {
 	private _onDidChangeTreeData = new vscode.EventEmitter<CheckpointNode | CheckpointActionNode | undefined | null | void>();
@@ -23,7 +27,8 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 			vscode.commands.registerCommand('clawsouls.createCheckpoint', () => this.createCheckpoint()),
 			vscode.commands.registerCommand('clawsouls.checkpoint.restore', (node: CheckpointNode) => this.restoreCheckpoint(node)),
 			vscode.commands.registerCommand('clawsouls.checkpoint.delete', (node: CheckpointNode) => this.deleteCheckpoint(node)),
-			vscode.commands.registerCommand('clawsouls.checkpoint.diff', (node: CheckpointNode) => this.diffCheckpoint(node))
+			vscode.commands.registerCommand('clawsouls.checkpoint.diff', (node: CheckpointNode) => this.diffCheckpoint(node)),
+			vscode.commands.registerCommand('clawsouls.checkpoint.autoRestore', () => this.autoRestore())
 		);
 
 		this.loadCheckpoints();
@@ -78,6 +83,7 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 								label: meta.label || e.name,
 								timestamp: meta.timestamp || '',
 								files: meta.files || [],
+								hashes: meta.hashes,
 								score: meta.score
 							};
 						} catch {}
@@ -93,6 +99,118 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		} catch {
 			this.checkpoints = [];
 		}
+	}
+
+	/**
+	 * Auto-restore flow per patent APP2026-0325 claim 1 ⑤+⑥.
+	 *
+	 * Runs the multi-layer SoulScan pipeline against the current workspace
+	 * state. If the score falls below the clean threshold, walks the
+	 * checkpoint history newest-first (claim ⑤ — identify the first
+	 * contamination point) and offers restoration from the most recent
+	 * checkpoint that was clean at capture time (claim ⑥). Always confirms
+	 * with the user before overwriting, and takes a safety checkpoint of
+	 * the contaminated state first so the restore can itself be undone.
+	 */
+	async autoRestore(options: { silent?: boolean } = {}): Promise<void> {
+		const workspaceDir = this.getWorkspaceDirectory();
+
+		// Claim ③ + ④ — run multi-layer contamination scan + judgment.
+		let currentResult: { score: number } | null = null;
+		try {
+			const { scanSoulFiles } = require('../engine/soulscan');
+			currentResult = scanSoulFiles(workspaceDir);
+		} catch (err: any) {
+			if (!options.silent) {
+				vscode.window.showErrorMessage(`Auto-restore: SoulScan failed — ${err.message}`);
+			}
+			return;
+		}
+
+		if (!currentResult || currentResult.score >= CLEAN_THRESHOLD) {
+			if (!options.silent) {
+				const score = currentResult?.score ?? 'unknown';
+				vscode.window.showInformationMessage(
+					`SoulScan score: ${score}/100 — no contamination detected, no restore needed.`
+				);
+			}
+			return;
+		}
+
+		// Claim ⑤ — walk checkpoint history newest-first; pick first clean.
+		this.loadCheckpoints();
+		const target = this.checkpoints.find(cp =>
+			typeof cp.score === 'number' && cp.score >= CLEAN_THRESHOLD
+		);
+
+		if (!target) {
+			vscode.window.showWarningMessage(
+				`⚠️ Contamination detected (score: ${currentResult.score}/100) but no clean checkpoint exists in history. Create a clean checkpoint first.`
+			);
+			return;
+		}
+
+		// Confirm with user — auto-restore still requires consent.
+		const confirm = await vscode.window.showWarningMessage(
+			`⚠️ Contamination detected: current score ${currentResult.score}/100 (< ${CLEAN_THRESHOLD}).\n\n` +
+				`Last clean checkpoint: "${target.label}" (score: ${target.score}).\n\n` +
+				`Restore now? A safety checkpoint of the current state will be created first.`,
+			{ modal: true },
+			'Restore from last clean'
+		);
+		if (confirm !== 'Restore from last clean') return;
+
+		// Safety: auto-checkpoint current (contaminated) state before overwriting.
+		await this.createCheckpointSilent(`auto-before-restore (contaminated, score ${currentResult.score})`);
+
+		// Claim ⑥ — restore from identified target checkpoint (no extra confirm).
+		const targetNode = new CheckpointNode(target);
+		await this.restoreCheckpointInternal(targetNode, /* skipConfirm */ true);
+	}
+
+	/**
+	 * Non-interactive checkpoint creation used by auto-restore to protect
+	 * the contaminated state before it gets overwritten. Same machinery as
+	 * createCheckpoint() minus the input prompt.
+	 */
+	private async createCheckpointSilent(label: string): Promise<void> {
+		const rootDir = this.getWorkspaceDirectory();
+		const soulFiles = ['soul.json', 'SOUL.md', 'AGENTS.md', 'MEMORY.md', 'IDENTITY.md', 'HEARTBEAT.md', 'STYLE.md'];
+		const existingFiles: string[] = [];
+		for (const f of soulFiles) {
+			if (fs.existsSync(path.join(rootDir, f))) existingFiles.push(f);
+		}
+		if (existingFiles.length === 0) return;
+
+		const cpId = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+		const cpDir = path.join(this.getCheckpointDir(), cpId);
+		fs.mkdirSync(cpDir, { recursive: true });
+
+		const hashes: Record<string, string> = {};
+		for (const f of existingFiles) {
+			const src = path.join(rootDir, f);
+			const dst = path.join(cpDir, f);
+			fs.copyFileSync(src, dst);
+			const content = fs.readFileSync(src);
+			hashes[f] = crypto.createHash('sha256').update(content).digest('hex');
+		}
+
+		let scanScore: number | undefined;
+		try {
+			const { scanSoulFiles } = require('../engine/soulscan');
+			const result = scanSoulFiles(rootDir);
+			scanScore = result.score;
+		} catch {}
+
+		const meta = {
+			label,
+			timestamp: new Date().toISOString(),
+			files: existingFiles,
+			hashes,
+			score: scanScore,
+		};
+		fs.writeFileSync(path.join(cpDir, 'checkpoint.json'), JSON.stringify(meta, null, 2));
+		this.refresh();
 	}
 
 	private async createCheckpoint(): Promise<void> {
@@ -155,15 +273,55 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 	}
 
 	private async restoreCheckpoint(node: CheckpointNode): Promise<void> {
-		const confirm = await vscode.window.showWarningMessage(
-			`Restore checkpoint "${node.cp.label}"? This will overwrite current soul files.`,
-			{ modal: true },
-			'Restore'
-		);
-		if (confirm !== 'Restore') return;
+		await this.restoreCheckpointInternal(node, /* skipConfirm */ false);
+	}
+
+	/**
+	 * Restore implementation with optional confirm skip. Verifies SHA-256
+	 * hashes of every file in the checkpoint against the recorded meta
+	 * before touching the workspace — tampered / corrupted checkpoints
+	 * abort cleanly instead of silently writing bad data back.
+	 */
+	private async restoreCheckpointInternal(node: CheckpointNode, skipConfirm: boolean): Promise<void> {
+		if (!skipConfirm) {
+			const confirm = await vscode.window.showWarningMessage(
+				`Restore checkpoint "${node.cp.label}"? This will overwrite current soul files.`,
+				{ modal: true },
+				'Restore'
+			);
+			if (confirm !== 'Restore') return;
+		}
 
 		const rootDir = this.getWorkspaceDirectory();
 		const cpDir = path.join(this.getCheckpointDir(), node.cp.id);
+
+		// Integrity verification — every file's SHA-256 must match the
+		// hash recorded in meta.hashes. Older checkpoints without hashes
+		// fall back to a permissive path with a warning, so historical
+		// snapshots keep working after this upgrade.
+		const meta = node.cp.hashes;
+		if (meta) {
+			const mismatches: string[] = [];
+			for (const f of node.cp.files) {
+				const src = path.join(cpDir, f);
+				if (!fs.existsSync(src)) continue;
+				const actual = crypto.createHash('sha256').update(fs.readFileSync(src)).digest('hex');
+				const expected = meta[f];
+				if (expected && actual !== expected) {
+					mismatches.push(`${f} (expected ${expected.slice(0, 12)}…, got ${actual.slice(0, 12)}…)`);
+				}
+			}
+			if (mismatches.length > 0) {
+				vscode.window.showErrorMessage(
+					`❌ Checkpoint integrity check failed — restore aborted. Mismatched files: ${mismatches.join(', ')}`
+				);
+				return;
+			}
+		} else {
+			vscode.window.showWarningMessage(
+				`⚠️ Checkpoint "${node.cp.label}" has no stored hashes — integrity check skipped. Restoring anyway.`
+			);
+		}
 
 		for (const f of node.cp.files) {
 			const src = path.join(cpDir, f);
