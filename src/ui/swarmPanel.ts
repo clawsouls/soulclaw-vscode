@@ -640,12 +640,30 @@ Merge these two versions intelligently:
 							if (f.endsWith('.md')) memFiles.push(path.join(memDir, f));
 						}
 					}
-					for (const f of memFiles) {
+					// Resolve the `age` binary before attempting any encryption —
+					// common install locations are ~/.local/bin (pipx), brew
+					// prefixes on macOS (/opt/homebrew/bin, /usr/local/bin), and
+					// PATH. First match wins; falling back to bare "age" relies on
+					// PATH resolution and silently fails when age isn't installed.
+					const ageCandidates = [
+						path.join(require('os').homedir(), '.local', 'bin', 'age'),
+						'/opt/homebrew/bin/age',
+						'/usr/local/bin/age',
+					];
+					let ageBin = ageCandidates.find(p => fs.existsSync(p));
+					if (!ageBin) {
 						try {
-							const ageBin = fs.existsSync(path.join(require('os').homedir(), '.local', 'bin', 'age')) 
-								? path.join(require('os').homedir(), '.local', 'bin', 'age') : 'age';
-							execSync(`"${ageBin}" -r "${recipients.split('\\n')[0]}" -o "${f}.age" "${f}"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
-						} catch { /* age not installed — skip */ }
+							ageBin = execSync('command -v age', { encoding: 'utf8' }).trim() || undefined;
+						} catch { /* age not on PATH */ }
+					}
+					if (!ageBin) {
+						out?.appendLine('[Swarm] age binary not found — skipping encryption (install with `brew install age`)');
+					} else {
+						for (const f of memFiles) {
+							try {
+								execSync(`"${ageBin}" -r "${recipients.split('\\n')[0]}" -o "${f}.age" "${f}"`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+							} catch { /* per-file age failure — skip and continue */ }
+						}
 					}
 					if (memFiles.length > 0) out?.appendLine(`[Swarm] encrypted ${memFiles.length} memory file(s)`);
 				}
@@ -667,8 +685,13 @@ Merge these two versions intelligently:
 				out?.appendLine('[Swarm] committed changes');
 			}
 
-			// Push to remote
-			const branch = this.getCurrentBranch() || 'agent/main';
+			// Push to remote — require an actual current branch. A silent
+			// fallback to 'agent/main' could clobber another agent's memory
+			// if branch detection fails for any reason.
+			const branch = this.getCurrentBranch();
+			if (!branch) {
+				throw new Error('Could not determine current agent branch. Run "Swarm: Join as Agent" first.');
+			}
 			execSync(`git push origin "${branch}" 2>&1`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 			vscode.window.showInformationMessage(`✅ Pushed to ${branch}`);
 			out?.appendLine(`[Swarm] pushed to origin/${branch}`);
