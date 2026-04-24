@@ -86,8 +86,10 @@ export function setupWizard(): Promise<{ completed: boolean }> {
 				case 'fetchSouls':
 					try {
 						const resp = await apiGet('/souls?limit=200');
+						console.log('[SoulClaw Setup] fetchSouls: got', (resp.souls || []).length, 'souls');
 						panel.webview.postMessage({ type: 'soulsLoaded', souls: resp.souls || [] });
-					} catch {
+					} catch (fetchErr: any) {
+						console.error('[SoulClaw Setup] fetchSouls error:', fetchErr?.message || fetchErr);
 						panel.webview.postMessage({ type: 'soulsLoaded', souls: [] });
 					}
 					break;
