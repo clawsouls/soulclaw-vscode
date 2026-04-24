@@ -1,7 +1,20 @@
 /**
  * Embedded SoulScan — lightweight soul file scanner.
- * 53 security rules (from scan-rules.json) + 10 quality rules.
- * Runs without external CLI dependency.
+ *
+ * Implements the multi-layer contamination detection described in
+ * patent application APP2026-0325 (SoulRollback). Each scan traverses
+ * three independent rule layers over the same soul file corpus:
+ *
+ *   1. SECURITY  (53 rules) — prompt injection, code execution, XSS,
+ *                            exfiltration, secrets, harmful content
+ *   2. PII       ( 2 rules) — phone, email
+ *   3. QUALITY   (11 rules) — structural/schema checks on soul.json
+ *                            and SOUL.md
+ *
+ * The layers are intentionally kept separate so a consumer can tell
+ * *what kind* of contamination fired, which is what the patent's
+ * "first-contaminated-checkpoint" walk relies on when deciding
+ * whether a checkpoint is a viable clean anchor.
  */
 
 import * as fs from 'fs';
@@ -12,7 +25,7 @@ export interface ScanResult {
 	grade: string;         // A/B/C/D/F
 	issues: ScanIssue[];
 	fileCount: number;
-	categories: { security: number; quality: number };
+	categories: { security: number; quality: number; pii: number };
 }
 
 export interface ScanIssue {
@@ -21,10 +34,10 @@ export interface ScanIssue {
 	message: string;
 	file?: string;
 	line?: number;
-	category: 'security' | 'quality';
+	category: 'security' | 'quality' | 'pii';
 }
 
-/* ── Security rules (53, from scan-rules v1.2.0) ─────────────────────── */
+/* ── Layer 1: Security rules (53, from scan-rules v1.2.0) ─────────────── */
 
 const SECURITY_RULES: { id: string; severity: 'error' | 'warning'; pattern: RegExp; msg: string }[] = [
 	// Prompt injection
@@ -91,7 +104,14 @@ const SECURITY_RULES: { id: string; severity: 'error' | 'warning'; pattern: RegE
 	{ id: 'SEC087', severity: 'error', pattern: /\b(child|minor|underage)\s+(porn|sexual|abuse|exploit)/i, msg: 'Harmful content: CSAM-related' },
 	{ id: 'SEC088', severity: 'warning', pattern: /\b(phishing|scam|fraud)\s+(email|message|template|script)/i, msg: 'Harmful content: fraud/scam template' },
 	{ id: 'SEC089', severity: 'warning', pattern: /\bno\s+(ethical|moral|safety)\s+(constraints?|guidelines?|boundaries|limits?)/i, msg: 'Harmful content: no ethical constraints declaration' },
-	// PII (from original rules — not in scan-rules.json)
+];
+
+/* ── Layer 2: PII rules (2) ──────────────────────────────────────────── */
+
+// Kept separate from SECURITY_RULES so the UI and the patent
+// "contamination-layer" breakdown can render / reason about PII
+// independently from prompt-injection / code-execution findings.
+const PII_RULES: { id: string; severity: 'error' | 'warning'; pattern: RegExp; msg: string }[] = [
 	{ id: 'PII001', severity: 'warning', pattern: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/, msg: 'Phone number detected' },
 	{ id: 'PII002', severity: 'warning', pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i, msg: 'Email address detected' },
 ];
@@ -118,7 +138,7 @@ export function scanSoulFiles(workspaceDir: string): ScanResult {
 		if (fileName === 'soul.json') { soulJsonContent = content; }
 		if (fileName === 'SOUL.md') { soulMdContent = content; soulMdExists = true; }
 
-		// ── Security rules (line-by-line) ──
+		// ── Layer 1: Security rules (line-by-line) ──
 		for (const rule of SECURITY_RULES) {
 			for (let i = 0; i < lines.length; i++) {
 				if (rule.pattern.test(lines[i])) {
@@ -134,7 +154,24 @@ export function scanSoulFiles(workspaceDir: string): ScanResult {
 			}
 		}
 
-		// ── QUA-006: File size > 50KB ──
+		// ── Layer 2: PII rules (line-by-line) ──
+		for (const rule of PII_RULES) {
+			for (let i = 0; i < lines.length; i++) {
+				if (rule.pattern.test(lines[i])) {
+					issues.push({
+						severity: rule.severity,
+						rule: rule.id,
+						message: rule.msg,
+						file: fileName,
+						line: i + 1,
+						category: 'pii',
+					});
+				}
+			}
+		}
+
+		// ── Layer 3: Quality rules (per-file, inline) ──
+		// QUA-006: File size > 50KB ──
 		if (content.length > 50000) {
 			issues.push({ severity: 'warning', rule: 'QUA-006', message: `File exceeds 50KB (${(content.length / 1024).toFixed(0)}KB)`, file: fileName, category: 'quality' });
 		}
@@ -198,6 +235,7 @@ export function scanSoulFiles(workspaceDir: string): ScanResult {
 
 	const securityCount = issues.filter(i => i.category === 'security').length;
 	const qualityCount = issues.filter(i => i.category === 'quality').length;
+	const piiCount = issues.filter(i => i.category === 'pii').length;
 
-	return { score, grade, issues, fileCount, categories: { security: securityCount, quality: qualityCount } };
+	return { score, grade, issues, fileCount, categories: { security: securityCount, quality: qualityCount, pii: piiCount } };
 }
