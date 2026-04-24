@@ -81,8 +81,8 @@ Full-featured chat with streaming, markdown rendering, code blocks, and persiste
 ### 🔍 SoulScan
 
 - **Auto-scan on save**: Scans soul files automatically when you save
-- **Sidebar panel**: View scan results grouped by category (Security, PII, Quality)
-- **58 security rules**: Prompt injection (8 languages), code execution, XSS, secrets, PII detection
+- **Sidebar panel**: View scan results grouped by category (Security, PII, Quality, Integrity)
+- **4-layer detection**: 53 security rules (prompt injection in 8 languages, code execution, XSS, secrets, harmful content) + 2 PII rules (phone, email) + 11 structural quality rules + opt-in SHA-256 integrity verification
 - **Inline diagnostics**: Warnings appear directly in your editor
 - **Scoring**: 0-100 score with 5 risk levels (Verified → Blocked)
 - **Run manually**: Click "Run SoulScan" in the sidebar panel
