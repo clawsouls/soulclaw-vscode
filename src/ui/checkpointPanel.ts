@@ -16,6 +16,13 @@ interface CheckpointInfo {
 /** Minimum score for a checkpoint to be considered "clean" during auto-restore. */
 const CLEAN_THRESHOLD = 75;
 
+/**
+ * Upper bound on retained checkpoints. Older entries drop on each
+ * create to keep `.clawsouls/checkpoints/` from growing unbounded on
+ * workspaces that snapshot frequently (heartbeat-driven agents, etc.).
+ */
+const MAX_CHECKPOINT_HISTORY = 50;
+
 export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNode | CheckpointActionNode> {
 	private _onDidChangeTreeData = new vscode.EventEmitter<CheckpointNode | CheckpointActionNode | undefined | null | void>();
 	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -210,6 +217,7 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 			score: scanScore,
 		};
 		fs.writeFileSync(path.join(cpDir, 'checkpoint.json'), JSON.stringify(meta, null, 2));
+		this.pruneHistory();
 		this.refresh();
 	}
 
@@ -269,7 +277,30 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 
 		const scoreText = scanScore !== undefined ? ` · Score: ${scanScore}/100` : '';
 		vscode.window.showInformationMessage(`✅ Checkpoint "${meta.label}" created (${existingFiles.length} files${scoreText}).`);
+		this.pruneHistory();
 		this.refresh();
+	}
+
+	/**
+	 * Enforce `MAX_CHECKPOINT_HISTORY` by dropping the oldest checkpoints
+	 * on disk. Runs after every `create*` call so heartbeat-driven
+	 * snapshots can't fill the workspace. Newest-first preservation
+	 * matches the auto-restore walk order — we never want to evict a
+	 * recent clean anchor.
+	 */
+	private pruneHistory(): void {
+		try {
+			this.loadCheckpoints();
+			if (this.checkpoints.length <= MAX_CHECKPOINT_HISTORY) return;
+			const toRemove = this.checkpoints.slice(MAX_CHECKPOINT_HISTORY);
+			for (const cp of toRemove) {
+				const cpDir = path.join(this.getCheckpointDir(), cp.id);
+				try {
+					fs.rmSync(cpDir, { recursive: true, force: true });
+				} catch { /* best effort — skip on permission errors */ }
+			}
+			this.loadCheckpoints();
+		} catch { /* non-fatal */ }
 	}
 
 	private async restoreCheckpoint(node: CheckpointNode): Promise<void> {
@@ -333,11 +364,19 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 
 		vscode.window.showInformationMessage(`✅ Restored checkpoint "${node.cp.label}". Restarting engine...`);
 
-		// Restart engine so it picks up restored soul files
+		// Restart engine so it picks up restored soul files. Surface any
+		// restart failure to the user — otherwise a silent restart error
+		// leaves the soul files restored on disk but the running engine
+		// still holding the contaminated state in memory, a dangerously
+		// inconsistent UX.
 		try {
 			await vscode.commands.executeCommand('clawsouls.restartGateway');
-		} catch {
-			// Command may not be registered yet — non-fatal
+		} catch (err: any) {
+			const detail = typeof err?.message === 'string' ? err.message : String(err);
+			vscode.window.showWarningMessage(
+				`⚠️ Checkpoint restored but engine restart failed (${detail.slice(0, 120)}). ` +
+					`Run "ClawSouls: Restart Gateway" manually so the engine picks up the restored soul files.`
+			);
 		}
 	}
 
