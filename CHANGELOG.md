@@ -4,12 +4,11 @@
 
 ### Added
 - **SoulScan: 4th INTEGRITY detection layer** — opt-in SHA-256 hash verification via `ScanOptions.expectedHashes`. When a caller (e.g. `checkpointPanel`) passes the hashes map from a `checkpoint.json` manifest, each soul file is hashed and compared; mismatches emit `INT001` with `severity: error`. The pre-existing 3 layers (SECURITY, PII, QUALITY) always run; INTEGRITY is opt-in and a no-op when no map is provided. `ScanResult.categories` now exposes all 4 keys (`security`, `quality`, `pii`, `integrity`) so the sidebar UI can render a consistent 4-layer badge.
-- **SoulRollback: auto-restore command** — `clawsouls.checkpoint.autoRestore` walks history newest-first, identifies the first contamination point (score < `CLEAN_THRESHOLD = 75`), takes a pre-restore safety snapshot via `createCheckpointSilent()`, verifies SHA-256 hashes against the checkpoint manifest, and overwrites the workspace with the immediately-preceding clean checkpoint. Implements claim ⑤+⑥ of patent APP2026-0325KRC1.
+- **SoulRollback: auto-restore command** — `clawsouls.checkpoint.autoRestore` walks history newest-first, identifies the first contamination point (score < `CLEAN_THRESHOLD = 75`), takes a pre-restore safety snapshot via `createCheckpointSilent()`, verifies SHA-256 hashes against the checkpoint manifest, and overwrites the workspace with the immediately-preceding clean checkpoint.
 - **SoulRollback: retention policy** — `MAX_CHECKPOINT_HISTORY = 50` enforced after every `createCheckpoint` and `createCheckpointSilent` call. Oldest entries dropped on disk to keep `.clawsouls/checkpoints/` from unbounded growth on heartbeat-driven workspaces.
-- **Patent test suite** — `tests/patent/`:
-  - `soulscan.patent.test.ts` (10/10 passing, run via `npx tsx`) covers the 4-layer separation invariant (rule-id prefix ↔ category 1:1) and grade-band consistency with WasmClaw 0.5.0.
-  - `APP2026-0324-swarm-memory.manual.md` + `.ko.md` — 7-§ manual protocol covering all Swarm Memory claim components, including regression checks for the v0.8.1 swarm hardening batch.
-  - `APP2026-0325-soul-rollback.manual.md` + `.ko.md` — 6-§ manual protocol for SoulRollback aligned with the BLT-final claim wording ("오염이 최초로 발생한 시점 식별", "식별된 시점 직전의 체크포인트 기준 복원"). MAX_CHECKPOINT_HISTORY retention moved into the regression section, since it is an implementation hardening — not a claim requirement.
+- **Regression test suite** — `tests/`:
+  - `tests/soulscan.test.ts` (10/10 passing, run via `npx tsx`) covers the 4-layer separation invariant (rule-id prefix ↔ category 1:1) and grade-band consistency with WasmClaw 0.5.0.
+  - Manual walkthrough protocols (en + ko) covering each Swarm Memory and SoulRollback feature end-to-end, including regression checks for the v0.8.1 swarm hardening batch.
 
 ### Changed
 - **SoulScan grade bands aligned with WasmClaw 0.5.0** — `A ≥ 90`, `B ≥ 75`, `C ≥ 50`, `D ≥ 25`, `F < 25` (previously `60`/`40`). Same persona now lands in the same band whether scanned via the extension or via the standalone WasmClaw engine.
@@ -26,11 +25,6 @@
 - **Swarm: explicit LLM-resolved count** — total resolved files is read from a counter incremented at resolution time, not inferred from a last-write guess.
 - **Rollback: surfaced restart failures** — when `clawsouls.restartGateway` throws after a checkpoint restore, a warning toast tells the user the soul files are restored but the engine still holds the contaminated state in memory. Previously this failure was silently swallowed.
 - **Setup: `fetchSouls` debug logging** — the soul-picker showing "no results" is no longer indistinguishable from "fetchSouls threw"; the Extension Host output channel now logs the count on success and the error detail on failure.
-
-### Patent self-implementation alignment
-- `e76032c` (auto-restore) implements APP2026-0325KRC1 claim 1 step 3 ("오염이 최초로 발생한 시점을 식별하고, 식별된 시점 직전의 체크포인트를 기준으로 복원").
-- `abde3ac` (INTEGRITY layer) satisfies APP2026-0325KRC1 / APP2026-0326KRC1 claim 1 "적어도 하나 이상의 감지 계층" / "적어도 2개 이상의 검증 단계" with a 4-layer multi-stage pipeline.
-- All three filed applications (APP2026-0324/0325/0326) have their claim-1 self-implementation surface verifiable in the shipping VSIX as of this release.
 
 ## [0.5.1] - 2026-03-07
 
