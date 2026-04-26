@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.4] - 2026-04-27
+
+### Fixed
+- **SoulScan panel — render all 4 contamination layers** — `soulscanPanel.ts` previously filtered the result to `security` + `quality` only, silently dropping `pii` and `integrity` issues from the tree even when the engine emitted them. The panel now:
+  - Always shows a `📊 4-layer: SEC n · PII n · QUA n · INT n` badge under the score header so the four categories are visible even when a layer is zero, matching the README "Run 4-layer contamination detection on any checkpoint" statement.
+  - Renders all four category groups (SEC → PII → QUA → INT, in that fixed order) when non-empty, with distinct icons (`🔒 / 🪪 / 📋 / 🔐`) and labels.
+- **SoulScan grade-icon threshold drift** — the grade icon ladder used `>= 60` for orange while the engine grade bands (since 0.8.2) cut at `>= 50` for `C`. Aligned to `>= 50` so the colored dot in the score line matches the letter grade.
+
 ## [0.8.3] - 2026-04-27
 
 ### Added
