@@ -109,20 +109,20 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 	}
 
 	/**
-	 * Auto-restore flow per patent APP2026-0325 claim 1 ⑤+⑥.
+	 * Auto-restore flow.
 	 *
 	 * Runs the multi-layer SoulScan pipeline against the current workspace
 	 * state. If the score falls below the clean threshold, walks the
-	 * checkpoint history newest-first (claim ⑤ — identify the first
-	 * contamination point) and offers restoration from the most recent
-	 * checkpoint that was clean at capture time (claim ⑥). Always confirms
-	 * with the user before overwriting, and takes a safety checkpoint of
-	 * the contaminated state first so the restore can itself be undone.
+	 * checkpoint history newest-first to identify the first contamination
+	 * point and offers restoration from the most recent checkpoint that
+	 * was clean at capture time. Always confirms with the user before
+	 * overwriting, and takes a safety checkpoint of the contaminated
+	 * state first so the restore can itself be undone.
 	 */
 	async autoRestore(options: { silent?: boolean } = {}): Promise<void> {
 		const workspaceDir = this.getWorkspaceDirectory();
 
-		// Claim ③ + ④ — run multi-layer contamination scan + judgment.
+		// Run multi-layer contamination scan + judgment.
 		let currentResult: { score: number } | null = null;
 		try {
 			const { scanSoulFiles } = require('../engine/soulscan');
@@ -144,7 +144,7 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 			return;
 		}
 
-		// Claim ⑤ — walk checkpoint history newest-first; pick first clean.
+		// Walk checkpoint history newest-first; pick first clean.
 		this.loadCheckpoints();
 		const target = this.checkpoints.find(cp =>
 			typeof cp.score === 'number' && cp.score >= CLEAN_THRESHOLD
@@ -170,7 +170,7 @@ export class CheckpointProvider implements vscode.TreeDataProvider<CheckpointNod
 		// Safety: auto-checkpoint current (contaminated) state before overwriting.
 		await this.createCheckpointSilent(`auto-before-restore (contaminated, score ${currentResult.score})`);
 
-		// Claim ⑥ — restore from identified target checkpoint (no extra confirm).
+		// Restore from identified target checkpoint (no extra confirm).
 		const targetNode = new CheckpointNode(target);
 		await this.restoreCheckpointInternal(targetNode, /* skipConfirm */ true);
 	}

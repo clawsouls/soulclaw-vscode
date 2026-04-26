@@ -1,6 +1,5 @@
 /**
- * Patent test — APP2026-0325 claim component ③ (multi-layer
- * contamination detection).
+ * Regression test — multi-layer contamination detection.
  *
  * Asserts that `scanSoulFiles()` fires each of the three contamination
  * layers (SEC / PII / QUA) against the `contaminated-soul` fixture and
@@ -9,7 +8,7 @@
  *
  * Run from the repo root with:
  *
- *     npx tsx tests/patent/soulscan.patent.test.ts
+ *     npx tsx tests/regression/soulscan.test.ts
  *
  * `tsx` is zero-install via npx — no devDependency change needed.
  * Exit code 0 = all passed; non-zero = at least one assertion failed.

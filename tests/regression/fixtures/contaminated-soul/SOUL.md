@@ -1,7 +1,7 @@
 This is a contaminated soul fixture. It deliberately triggers
-detections in all three layers so the multi-layer patent test can
-assert that each layer fires independently and is counted under the
-correct category.
+detections in all three layers so the multi-layer regression test
+can assert that each layer fires independently and is counted under
+the correct category.
 
 The fixture is written as flat prose with no `## ` headers on
 purpose, to additionally trigger the structural quality checks.

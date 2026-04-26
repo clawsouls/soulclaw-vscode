@@ -1,14 +1,14 @@
-# 특허 테스트 프로토콜 — APP2026-0325 (SoulRollback)
+# 리그레션 테스트 프로토콜 — SoulRollback
 
-확장 프로그램 개발 호스트에서 Tom이 직접 따라가며 SoulRollback
-특허의 6개 청구항 구성요소를 하나씩 검증할 수 있도록 만든 수동
-워크스루. 구성요소 ③ (다층 오염 감지)은 자동 노드 테스트로도
-함께 커버되며 — 본 문서는 유닛 테스트가 건드릴 수 없는 VS Code
-가시(可視) 면을 다룹니다.
+확장 프로그램 개발 호스트에서 Tom이 직접 따라가며 SoulRollback의
+6개 기능 구성요소를 하나씩 검증할 수 있도록 만든 수동 워크스루.
+구성요소 ③ (다층 오염 감지)은 자동 노드 테스트로도 함께 커버되며
+— 본 문서는 유닛 테스트가 건드릴 수 없는 VS Code 가시(可視) 면을
+다룹니다.
 
 ③의 자동 파트는 다음으로 실행:
 
-    npx tsx tests/patent/soulscan.patent.test.ts
+    npx tsx tests/regression/soulscan.test.ts
 
 위 명령이 exit 0으로 끝난 다음에야 본 수동 프로토콜을 시작합니다.
 
@@ -19,9 +19,9 @@
 - `feature/embedded-engine` 빌드가 로드된 Extension Development
   Host.
 - 최소 `soul.json` + `SOUL.md`를 포함한 워크스페이스
-  (`tests/patent/fixtures/clean-soul/`를 임시 워크스페이스로 복사
+  (`tests/regression/fixtures/clean-soul/`를 임시 워크스페이스로 복사
   해서 시작 — 픽스처 자체를 변형하지 말 것).
-- `tests/patent/fixtures/contaminated-soul/` 디렉터리는 구성요소
+- `tests/regression/fixtures/contaminated-soul/` 디렉터리는 구성요소
   ③의 붙여넣기 소스로 사용.
 
 ---
@@ -53,9 +53,8 @@
 
 ## § 구성요소 ② — 체크포인트 이력 생성 및 관리
 
-**목표 (BLT 명세서, 청구항 1 단계 1):** *복수의 체크포인트 이력* —
-타임스탬프로 인덱싱되고 TreeDataProvider로 렌더링되는 시간순
-체크포인트 이력 축적.
+**목표:** 타임스탬프로 인덱싱되고 TreeDataProvider로 렌더링되는
+시간순 체크포인트 이력 축적.
 
 1. 임시 워크스페이스에서 **5개**의 체크포인트를 서로 다른 라벨
    (`state-1` … `state-5`)로 생성. 약 5초 간격으로 생성하여
@@ -70,23 +69,22 @@
 
    **예상 결과:** 트리가 5개 엔트리를 **최신순**으로 렌더링. 설명
    텍스트에 `<date> · <fileCount> files · <✅/⚠️/❌> <score>` 표시
-   (BLT 증거 §3-4의 `CheckpointNode` 렌더러 참조).
+   (`checkpointPanel.ts`의 `CheckpointNode` 렌더러 참조).
 
 **음성 테스트 (손상 항목 스킵):** 임의의 체크포인트 디렉터리에서
 `checkpoint.json`만 삭제, 다른 파일은 유지. `loadCheckpoints()`가
 예외 없이 해당 항목을 건너뛰어야 함 — 나머지 4개는 정상 렌더링.
 
-(`MAX_CHECKPOINT_HISTORY = 50` 보관 상한은 청구항이 요구하지 않는
-구현 디테일이며, 아래 "리그레션 체크" 섹션에서 별도로 검증.)
+(`MAX_CHECKPOINT_HISTORY = 50` 보관 상한은 아래 "리그레션 체크"
+섹션에서 별도로 검증.)
 
 ---
 
 ## § 구성요소 ③ — 다층 오염 감지 파이프라인
 
-**목표 (BLT 명세서, 청구항 1 단계 2):** *적어도 하나 이상의 감지
-계층을 포함하는 다층 오염 감지 파이프라인을 실행*. 현재 구현은
-마켓플레이스 README "Run 4-layer contamination detection on any
-checkpoint" 문구에 부합하는 **4개 계층**을 노출함:
+**목표:** 다층 오염 감지 파이프라인 실행. 현재 구현은 마켓플레이스
+README "Run 4-layer contamination detection on any checkpoint"
+문구에 부합하는 **4개 계층**을 노출함:
 
 | # | 계층 | 구현 | 활성 조건 |
 |---|------|------|-----------|
@@ -95,11 +93,11 @@ checkpoint" 문구에 부합하는 **4개 계층**을 노출함:
 | 3 | QUALITY (11건 규칙) | `soul.json` / `SOUL.md` 구조/스키마 | 항상 |
 | 4 | INTEGRITY | 호출자 제공 `expectedHashes` vs SHA-256 비교 | 옵트인 (체크포인트 컨텍스트) |
 
-(자동 테스트 `soulscan.patent.test.ts`가 4개 계층 전부 커버. 본
-수동 단계는 VS-Code-가시 면을 검증.)
+(자동 테스트 `soulscan.test.ts`가 4개 계층 전부 커버. 본 수동
+단계는 VS-Code-가시 면을 검증.)
 
 1. 임시 워크스페이스에서 `SOUL.md`를 열고
-   `tests/patent/fixtures/contaminated-soul/SOUL.md`의 전체 내용을
+   `tests/regression/fixtures/contaminated-soul/SOUL.md`의 전체 내용을
    맨 아래에 붙여넣고 저장.
 2. SoulScan 패널에서 **"Run Scan"** 클릭.
 
@@ -141,10 +139,10 @@ checkpoint" 문구에 부합하는 **4개 계층**을 노출함:
 
 ## § 구성요소 ⑤ — 최초 오염 발생 시점 식별
 
-**목표 (BLT 명세서, 청구항 1 단계 3a):** *오염이 최초로 발생한 시점을
-식별*. BLT 증거는 이 단계를 `diffCheckpoint()` 커맨드 (내부적으로
-`vscode.diff(cpUri, curUri)` 호출)에 매핑함 — 검토자가 인접 체크
-포인트들을 diff 뷰로 비교하여 최초 오염 시점을 시각적으로 식별.
+**목표:** 오염이 최초로 발생한 시점 식별. 이 단계는
+`diffCheckpoint()` 커맨드 (내부적으로 `vscode.diff(cpUri, curUri)`
+호출)에 매핑됨 — 검토자가 인접 체크포인트들을 diff 뷰로 비교
+하여 최초 오염 시점을 시각적으로 식별.
 
 1. 단일 임시 워크스페이스에서 의도적 타임라인 구성:
 
@@ -173,23 +171,20 @@ checkpoint" 문구에 부합하는 **4개 계층**을 노출함:
    `t2-dirtier`로 복원하거나 최신 오염 체크포인트를 조용히 지나
    치면 구성요소 ⑤ FAIL.
 
-**용어 주의:** BLT 명세서는 "식별된 시점 **직전의** 체크포인트"
-라고 명시 — 복원 대상은 식별된 오염 시점에 상대적으로 정의되며,
-절대 기준 "가장 최근 클린 앵커"로 정의되지 않음. 히스토리가
-연속적 clean → dirty일 때 두 정의는 일치하지만, 의도적으로
-clean → dirty → clean → dirty 타임라인을 만들면 특허 명세서는
-*가장 이른* dirty 직전으로 복원해야 하며 최신-clean이 아님.
-PASS/FAIL 행에 편차를 명시.
+**용어 주의:** 복원 대상은 "식별된 시점 **직전의** 체크포인트"
+이며, 식별된 오염 시점에 상대적으로 정의됨. 절대 기준 "가장 최근
+클린 앵커"로 정의되지 않음. 히스토리가 연속적 clean → dirty일 때
+두 정의는 일치하지만, 의도적으로 clean → dirty → clean → dirty
+타임라인을 만들면 *가장 이른* dirty 직전으로 복원해야 하며
+최신-clean이 아님. PASS/FAIL 행에 편차를 명시.
 
 ---
 
 ## § 구성요소 ⑥ — 식별된 시점 직전의 체크포인트 기준 복원
 
-**목표 (BLT 명세서, 청구항 1 단계 3b):** *식별된 시점 직전의
-체크포인트를 기준으로 에이전트 데이터를 복원* — §⑤에서 식별된
-오염 시점 **직전**의 체크포인트를 기준으로 복원. SHA-256 해시
-검증 및 사전 안전 스냅샷 기록은 하드닝 추가 사항이며, 청구항 이탈
-아님.
+**목표:** §⑤에서 식별된 오염 시점 **직전**의 체크포인트를 기준
+으로 복원. SHA-256 해시 검증 및 사전 안전 스냅샷 기록은 하드닝
+추가 사항.
 
 1. ⑤ 이어서 — 히스토리에 `t0-clean`, `t1-dirty`, `t2-dirtier`
    존재.
@@ -224,11 +219,11 @@ PASS/FAIL 행에 편차를 명시.
 
 - **해시 검증 존재**: 체크포인트 파일의 단 1바이트 손상/삭제 후
   복원 시도. 반드시 거부.
-- **보관 상한 강제 (MAX_CHECKPOINT_HISTORY = 50)**: 청구항 요구
-  사항이 아닌 구현 디테일 리그레션. 체크포인트 **52개** 생성
-  (스크립트 또는 heartbeat 활용, 라벨 `auto-1` … `auto-52`). 실행
-  `ls -1 .clawsouls/checkpoints/ | wc -l` — 정확히 50 반환해야
-  함. 가장 오래된 2개 (`auto-1`, `auto-2`)가 디스크에서 제거됨.
+- **보관 상한 강제 (MAX_CHECKPOINT_HISTORY = 50)**: 체크포인트
+  **52개** 생성 (스크립트 또는 heartbeat 활용, 라벨 `auto-1` …
+  `auto-52`). 실행 `ls -1 .clawsouls/checkpoints/ | wc -l` —
+  정확히 50 반환해야 함. 가장 오래된 2개 (`auto-1`, `auto-2`)가
+  디스크에서 제거됨.
 - **사전 안전 스냅샷**: 복원이 파일을 덮어쓰기 전에
   `createCheckpointSilent` 경로가 반드시 실행되어야 함.
 - **Restart 실패 UI 노출**: `clawsouls.restartGateway`가 throw할
@@ -238,7 +233,5 @@ PASS/FAIL 행에 편차를 명시.
 
 ## 합/불 기록 양식
 
-Swarm Memory 프로토콜과 동일 형식. 서명된 리포트를
-`clawsouls-internal/docs/SOUL_ROLLBACK_PATENT_TEST_REPORT_<날짜>.md`
-로 저장하여 KIPO가 BLT 지원 자료를 요청할 때 증빙으로 사용할 수
-있도록 보관.
+Swarm Memory 프로토콜과 동일 형식. 서명된 리포트를 해당 빌드의
+릴리스 노트와 함께 보관.

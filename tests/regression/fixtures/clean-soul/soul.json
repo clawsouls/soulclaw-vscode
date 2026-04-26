@@ -1,7 +1,7 @@
 {
   "name": "clean-test-soul",
   "specVersion": "0.5.0",
-  "description": "A clean soul used as a baseline fixture for patent test cases.",
+  "description": "A clean soul used as a baseline fixture for regression test cases.",
   "persona": {
     "tone": "helpful",
     "role": "assistant"

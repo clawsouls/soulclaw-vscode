@@ -13,7 +13,7 @@
 ### Changed
 - **SoulScan grade bands aligned with WasmClaw 0.5.0** — `A ≥ 90`, `B ≥ 75`, `C ≥ 50`, `D ≥ 25`, `F < 25` (previously `60`/`40`). Same persona now lands in the same band whether scanned via the extension or via the standalone WasmClaw engine.
 - **SoulScan layers explicitly separated** — `SECURITY_RULES` / `PII_RULES` / `QUALITY` / `INTEGRITY` are now four named, independently-iterated rule batteries inside `src/engine/soulscan.ts`. PII rules previously lived inside `SECURITY_RULES` and emitted `category: 'security'`; they now use `category: 'pii'`. No behaviour change for the clean-checkpoint walk (still score-based), but the layer breakdown is observable via `result.categories`.
-- **README SoulScan section reconciled** — `58 security rules` → `53 security rules` (actual count after PII extraction); category list `(Security, PII, Quality)` → `(Security, PII, Quality, Integrity)`; the layer breakdown is now itemised so the Marketplace-public statement and the BLT self-implementation evidence are backed by precise numbers.
+- **README SoulScan section reconciled** — `58 security rules` → `53 security rules` (actual count after PII extraction); category list `(Security, PII, Quality)` → `(Security, PII, Quality, Integrity)`; the layer breakdown is now itemised so the Marketplace-public statement is backed by precise numbers.
 
 ### Fixed
 - **Swarm: shell injection in LLM conflict resolver** — the curl invocation in `llmResolveConflicts` previously interpolated the prompt into argv. Switched to `--data-binary @-` with stdin via `execSync` input, eliminating any path where prompt content could be parsed by the shell.

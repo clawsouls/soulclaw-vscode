@@ -1,14 +1,14 @@
-# Patent Test Protocol — APP2026-0325 (SoulRollback)
+# Regression Test Protocol — SoulRollback
 
 Manual walk-through Tom can run in the Extension Development Host to
-verify each of the six claim components of SoulRollback. Component
+verify each of the six feature components of SoulRollback. Component
 ③ (multi-layer contamination detection) is *also* covered by the
 automated node test — this document walks the VS-Code-visible side
 that the unit test can't exercise.
 
 The automated part of ③ is:
 
-    npx tsx tests/patent/soulscan.patent.test.ts
+    npx tsx tests/regression/soulscan.test.ts
 
 which must exit 0 before starting this manual protocol.
 
@@ -19,9 +19,9 @@ which must exit 0 before starting this manual protocol.
 - VS Code Extension Development Host on
   `feature/embedded-engine` build.
 - A workspace containing at minimum `soul.json` + `SOUL.md`
-  (use `tests/patent/fixtures/clean-soul/` as a starting point —
+  (use `tests/regression/fixtures/clean-soul/` as a starting point —
   copy it into a scratch workspace; don't mutate the fixture).
-- The fixture directory `tests/patent/fixtures/contaminated-soul/`
+- The fixture directory `tests/regression/fixtures/contaminated-soul/`
   is used in Component ③ as a paste source.
 
 ---
@@ -55,9 +55,8 @@ with a hash-mismatch warning.
 
 ## § Component ② — Checkpoint history creation and management
 
-**Goal (BLT spec, claim 1 step 1):** *복수의 체크포인트 이력* —
-multiple checkpoints accumulate in time-ordered history, indexed
-by timestamp and rendered via the TreeDataProvider.
+**Goal:** multiple checkpoints accumulate in time-ordered history,
+indexed by timestamp and rendered via the TreeDataProvider.
 
 1. In the scratch workspace, create **5** checkpoints with
    distinct labels (`state-1` … `state-5`), spaced ~5 seconds
@@ -74,26 +73,24 @@ by timestamp and rendered via the TreeDataProvider.
    **Expected:** the tree renders all 5 entries in **newest-first**
    order. Description text shows `<date> · <fileCount> files · <✅/⚠️/❌>
    <score>` per the `CheckpointNode` renderer in
-   `checkpointPanel.ts` (see BLT evidence §3-4).
+   `checkpointPanel.ts`.
 
 **Negative test (corrupt entry is skipped):** delete
 `checkpoint.json` from one checkpoint dir but leave the other
 files. `loadCheckpoints()` must skip it without throwing — the
 other 4 still render.
 
-(The `MAX_CHECKPOINT_HISTORY = 50` retention cap is an implementation
-detail not required by the claim; it is verified separately in the
-"Regression checks" section below.)
+(The `MAX_CHECKPOINT_HISTORY = 50` retention cap is verified
+separately in the "Regression checks" section below.)
 
 ---
 
 ## § Component ③ — Multi-layer contamination-detection pipeline
 
-**Goal (BLT spec, claim 1 step 2):** *적어도 하나 이상의 감지
-계층을 포함하는 다층 오염 감지 파이프라인을 실행* — run the
-multi-layer detection pipeline. The current implementation exposes
-**four** layers, matching the Marketplace README statement
-"Run 4-layer contamination detection on any checkpoint":
+**Goal:** run the multi-layer detection pipeline. The current
+implementation exposes **four** layers, matching the Marketplace
+README statement "Run 4-layer contamination detection on any
+checkpoint":
 
 | # | Layer | Source | When active |
 |---|-------|--------|-------------|
@@ -102,11 +99,11 @@ multi-layer detection pipeline. The current implementation exposes
 | 3 | QUALITY (11 rules) | structural checks on `soul.json` / `SOUL.md` | always |
 | 4 | INTEGRITY | SHA-256 match vs caller-provided `expectedHashes` | opt-in (checkpoint context) |
 
-(The automated test `soulscan.patent.test.ts` covers all four
-layers. This manual step verifies the VS-Code-visible side.)
+(The automated test `soulscan.test.ts` covers all four layers.
+This manual step verifies the VS-Code-visible side.)
 
 1. In the scratch workspace, open `SOUL.md` and paste the full
-   contents of `tests/patent/fixtures/contaminated-soul/SOUL.md`
+   contents of `tests/regression/fixtures/contaminated-soul/SOUL.md`
    at the bottom. Save.
 2. In the SoulScan panel, click **"Run Scan"**.
 
@@ -153,12 +150,11 @@ checkpoint to be flagged as "not a safe restore anchor".
 
 ## § Component ⑤ — First-contamination point identification
 
-**Goal (BLT spec, claim 1 step 3a):** *오염이 최초로 발생한 시점을
-식별* — identify the point at which contamination first appeared.
-The BLT evidence maps this to the `diffCheckpoint()` command which
-renders `vscode.diff(cpUri, curUri)` — the reviewer visually
-locates the first point where the content became contaminated by
-diffing neighboring checkpoints in history.
+**Goal:** identify the point at which contamination first appeared.
+This maps to the `diffCheckpoint()` command which renders
+`vscode.diff(cpUri, curUri)` — the reviewer visually locates the
+first point where the content became contaminated by diffing
+neighboring checkpoints in history.
 
 1. Set up a deliberate timeline (all in one scratch workspace):
 
@@ -190,26 +186,23 @@ diffing neighboring checkpoints in history.
    `t2-dirtier` or silently falls through to the newest
    contaminated checkpoint, component ⑤ FAILS.
 
-**Note on terminology:** the BLT spec says "식별된 시점 **직전의**
-체크포인트" — the restore target is defined relative to the
-identified contamination point, not by picking the "newest clean
+**Note on terminology:** the restore target is defined relative to
+the identified contamination point, not by picking the "newest clean
 anchor" in absolute terms. The two coincide whenever history is
 continuously clean → dirty; if you intentionally produce a
-clean → dirty → clean → dirty timeline, the patent spec restores
-to the checkpoint directly before the *earliest* dirty one, not
-the latest-clean. Document any deviation in the PASS/FAIL row.
+clean → dirty → clean → dirty timeline, the spec restores to the
+checkpoint directly before the *earliest* dirty one, not the
+latest-clean. Document any deviation in the PASS/FAIL row.
 
 ---
 
 ## § Component ⑥ — Restore from the checkpoint immediately preceding the identified point
 
-**Goal (BLT spec, claim 1 step 3b):** *식별된 시점 직전의
-체크포인트를 기준으로 에이전트 데이터를 복원* — restore based on
-the checkpoint **immediately preceding** the identified
-contamination point (as determined in §⑤). The implementation also
-verifies SHA-256 hashes before overwriting, and writes a
-pre-restore safety snapshot — both are hardening additions, not
-deviations from the claim.
+**Goal:** restore based on the checkpoint **immediately preceding**
+the identified contamination point (as determined in §⑤). The
+implementation also verifies SHA-256 hashes before overwriting,
+and writes a pre-restore safety snapshot — both are hardening
+additions on top of the base restore.
 
 1. Continue from ⑤ — with `t0-clean`, `t1-dirty`, `t2-dirtier`
    in history.
@@ -249,7 +242,6 @@ deviations from the claim.
   in any checkpoint file and attempt restore. Restore must
   refuse.
 - **Retention cap enforced (MAX_CHECKPOINT_HISTORY = 50)**:
-  implementation-detail regression, not a claim requirement.
   Create **52** checkpoints (script it or use a heartbeat, labels
   `auto-1` … `auto-52`). Run `ls -1 .clawsouls/checkpoints/ | wc -l`
   — must return exactly 50. The two oldest (`auto-1`, `auto-2`)
@@ -263,8 +255,5 @@ deviations from the claim.
 
 ## Pass/Fail recording
 
-Same format as the Swarm Memory protocol. File the signed
-report at
-`clawsouls-internal/docs/SOUL_ROLLBACK_PATENT_TEST_REPORT_<DATE>.md`
-so the evidence exists if KIPO requests BLT supporting
-material.
+Same format as the Swarm Memory protocol. Archive the signed
+report alongside the release notes for the build under test.

@@ -1,10 +1,9 @@
 /**
  * Embedded SoulScan — lightweight soul file scanner.
  *
- * Implements the "다층 오염 감지 파이프라인 (multi-layer contamination
- * detection pipeline)" described in patent application APP2026-0325
- * (SoulRollback), claim 1. Each scan can traverse up to four
- * independent detection layers over the same soul file corpus:
+ * Implements a multi-layer contamination detection pipeline. Each scan
+ * can traverse up to four independent detection layers over the same
+ * soul file corpus:
  *
  *   1. SECURITY  (53 rules, pattern) — prompt injection, code
  *                                      execution, XSS, exfiltration,
@@ -28,9 +27,9 @@
  * checkpoint".
  *
  * The layers are intentionally kept separate so a consumer can tell
- * *what kind* of contamination fired, which is what the patent's
- * "오염이 최초로 발생한 시점 식별" (identify first contamination
- * point) step relies on when diffing two checkpoints.
+ * *what kind* of contamination fired, which the auto-restore flow
+ * relies on when diffing two checkpoints to identify the first
+ * contamination point.
  */
 
 import * as fs from 'fs';
@@ -138,9 +137,9 @@ const SECURITY_RULES: { id: string; severity: 'error' | 'warning'; pattern: RegE
 
 /* ── Layer 2: PII rules (2) ──────────────────────────────────────────── */
 
-// Kept separate from SECURITY_RULES so the UI and the patent
-// "contamination-layer" breakdown can render / reason about PII
-// independently from prompt-injection / code-execution findings.
+// Kept separate from SECURITY_RULES so the UI's contamination-layer
+// breakdown can render / reason about PII independently from
+// prompt-injection / code-execution findings.
 const PII_RULES: { id: string; severity: 'error' | 'warning'; pattern: RegExp; msg: string }[] = [
 	{ id: 'PII001', severity: 'warning', pattern: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/, msg: 'Phone number detected' },
 	{ id: 'PII002', severity: 'warning', pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i, msg: 'Email address detected' },

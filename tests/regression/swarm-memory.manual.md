@@ -1,8 +1,8 @@
-# Patent Test Protocol — APP2026-0324 (Swarm Memory)
+# Regression Test Protocol — Swarm Memory
 
 Manual walk-through Tom can run in the Extension Development Host to
-verify each of the seven claim components of Swarm Memory. The
-patent component numbers in `§` are the normative reference — every
+verify each of the seven feature components of Swarm Memory. The
+component numbers in `§` are the normative reference — every
 expected observation is tied back to one.
 
 ---
@@ -189,6 +189,5 @@ For each of the seven components, record one of:
 - `N/A` — component could not be exercised in this environment
   (document why — e.g., `age` not installed)
 
-Forward the signed-off report to `clawsouls-internal/docs/` as
-`SWARM_MEMORY_PATENT_TEST_REPORT_<DATE>.md` so the evidence is on
-file for the BLT response if KIPO asks.
+Archive the signed-off report alongside the release notes for the
+build under test.
