@@ -2,7 +2,7 @@
 	"name": "soulclaw-vscode",
 	"displayName": "SoulClaw — Soul-Powered AI Agent",
 	"description": "Zero Setup AI Agent with Soul-based personas, Swarm Memory collaboration, and integrated development tools",
-	"version": "0.8.2",
+	"version": "0.8.3",
 	"publisher": "clawsouls",
 	"icon": "media/icon.png",
 	"engines": {
@@ -184,6 +184,11 @@
 				"icon": "$(trash)"
 			},
 			{
+				"command": "clawsouls.checkpoint.autoRestore",
+				"title": "ClawSouls: Checkpoint — Auto-Restore",
+				"icon": "$(history)"
+			},
+			{
 				"command": "clawsouls.checkpoint.diff",
 				"title": "Diff with Current",
 				"icon": "$(diff)"
@@ -271,6 +276,11 @@
 					"command": "clawsouls.runScan",
 					"when": "view == clawsouls.soulscan",
 					"group": "navigation@1"
+				},
+				{
+					"command": "clawsouls.checkpoint.autoRestore",
+					"when": "view == clawsouls.checkpoints",
+					"group": "navigation@2"
 				}
 			],
 			"editor/context": [

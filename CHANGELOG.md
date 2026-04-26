@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.3] - 2026-04-27
+
+### Added
+- **`ClawSouls: Checkpoint — Auto-Restore` exposed in Command Palette + Soul Checkpoints panel toolbar** — the auto-restore handler shipped in 0.8.2 (`registerCommand('clawsouls.checkpoint.autoRestore', …)`) was reachable only programmatically. Now declared in `package.json#contributes.commands` and bound to the `clawsouls.checkpoints` view's title bar via `view/title navigation@2` with the `$(history)` icon, so users can trigger the multi-layer scan + first-contamination identification + restore-from-immediately-preceding-clean-checkpoint flow directly from the UI.
+
 ## [0.8.2] - 2026-04-26
 
 ### Added
