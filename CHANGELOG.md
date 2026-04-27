@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.5] - 2026-04-27
+
+### Fixed
+- **Swarm: `git clone file://` blocked by Git 2.38.1+ default policy** — `initSwarm` now passes `-c protocol.file.allow=always` to the clone invocation. Local `file://` swarms used for demos / sandboxes / CI work without the user having to flip the global git config (`git config --global protocol.file.allow always`). Real remote URLs (`https://`, `ssh://`) are unaffected.
+- **Swarm: bootstrap workspace memory on `Init Swarm`** — `MEMORY.md` and `memory/<today>.md` are now skeleton-created in the SoulClaw internal workspace (`{globalStorage}/.../soulclaw-state/workspace/`) immediately after init, so the first `Push Changes` after a fresh extension install has something to sync. Bootstrap is idempotent — never overwrites existing files. Without this, a clean install followed by Init Swarm + Push produced no commit (the staging-scoped `git add MEMORY.md memory/` had nothing to add) and made the change-detection step impossible to reproduce end-to-end.
+
 ## [0.8.4] - 2026-04-27
 
 ### Fixed

@@ -206,7 +206,14 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 
 		try {
 			if (repoUrl) {
-				execSync(`git clone "${repoUrl}" .`, { cwd: swarmDir, encoding: 'utf8' });
+				// `-c protocol.file.allow=always` keeps `file://` URLs working
+				// for local demos / sandbox swarms without forcing the user to
+				// flip the global git config (Git 2.38.1+ blocks `file://` in
+				// sub-process clones by default). The `-c` MUST come before the
+				// `clone` subcommand — `git clone -c …` only sets a config
+				// value inside the cloned repo and does not affect the clone
+				// transport policy itself.
+				execSync(`git -c protocol.file.allow=always clone "${repoUrl}" .`, { cwd: swarmDir, encoding: 'utf8' });
 				// Ensure main branch exists (empty repo case). Step-by-step
 				// so an auth prompt on push doesn't bring the whole chain
 				// down mid-shell-chain.
@@ -266,10 +273,55 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 			} else {
 				vscode.window.showInformationMessage(`✅ Swarm Memory initialized at: ${swarmDir}`);
 			}
+
+			// Bootstrap a workspace memory skeleton so the very first
+			// `Push Changes` after init has something to sync. Without this,
+			// a fresh install of the extension followed by Init Swarm + Push
+			// produces no commit (MEMORY.md / memory/ don't exist yet) and
+			// the examiner can't reproduce the change-detection step. We only
+			// create files that are missing — never overwrite anything.
+			this.bootstrapWorkspaceMemory();
+
 			this.refresh();
 			try { await vscode.commands.executeCommand('clawsouls.refreshStatusBar'); } catch {}
 		} catch (err: any) {
 			vscode.window.showErrorMessage(`Swarm Memory init failed: ${sanitizeError(err)}`);
+		}
+	}
+
+	/**
+	 * Ensure `getWorkspaceDir()` (the SoulClaw internal workspace, NOT the
+	 * VS Code folder) has a `MEMORY.md` and a `memory/` directory with at
+	 * least one daily-log file. Idempotent — only writes files that don't
+	 * already exist.
+	 */
+	private bootstrapWorkspaceMemory(): void {
+		try {
+			const { getWorkspaceDir } = require('../paths');
+			const wsDir: string = getWorkspaceDir();
+			fs.mkdirSync(wsDir, { recursive: true });
+
+			const memoryFile = path.join(wsDir, 'MEMORY.md');
+			if (!fs.existsSync(memoryFile)) {
+				fs.writeFileSync(memoryFile,
+					'# Memory\n\n' +
+					"Long-term notes the agent has chosen to remember. Add entries below; the agent will append more during normal use.\n"
+				);
+			}
+
+			const memoryDir = path.join(wsDir, 'memory');
+			fs.mkdirSync(memoryDir, { recursive: true });
+
+			const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+			const dailyFile = path.join(memoryDir, `${today}.md`);
+			if (!fs.existsSync(dailyFile)) {
+				fs.writeFileSync(dailyFile,
+					`## ${today} — Daily Log\n\n` +
+					"Day-by-day events the agent records. Edit freely; the agent will keep appending.\n"
+				);
+			}
+		} catch {
+			// bootstrap is best-effort — never block init on it.
 		}
 	}
 
@@ -290,10 +342,35 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		const branchName = input.startsWith('agent/') ? input : `agent/${input}`;
 
 		try {
+			// New agent branches must fork from the swarm trunk (main / master),
+			// NOT from whatever branch happens to be checked out at the moment.
+			// Otherwise a second `Join as Agent` after the first agent has
+			// pushed edits would branch FROM that agent's tip, making the new
+			// agent a fast-forward of the prior one — and a later merge of the
+			// two becomes "Already up to date" instead of producing the
+			// independent-history conflict the swarm flow is designed to
+			// surface.
+			let trunk: string | null = null;
+			try {
+				const branchOut = execSync('git branch --no-color', { cwd: swarmDir, encoding: 'utf8' });
+				const localBranches = branchOut
+					.split('\n')
+					.map(l => l.replace(/^\* /, '').trim())
+					.filter(l => l.length > 0);
+				trunk = localBranches.includes('main')
+					? 'main'
+					: localBranches.includes('master')
+						? 'master'
+						: null;
+			} catch { /* fall through, leave trunk null */ }
+
 			// Same error-classification as initSwarm — only accept
 			// "already exists" as a fall-through case.
 			try {
-				execSync(`git checkout -b "${branchName}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+				const cmd = trunk
+					? `git checkout -b "${branchName}" "${trunk}"`
+					: `git checkout -b "${branchName}"`;
+				execSync(cmd, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 			} catch (err: any) {
 				const msg = String(err?.stderr ?? err?.message ?? err);
 				if (!/already exists/i.test(msg)) throw err;
@@ -365,7 +442,20 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 		this.mergeBranchName = picked;
 
 		try {
-			execSync(`git merge "${picked}" --no-commit --allow-unrelated-histories`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			out?.appendLine(`[Swarm] merging "${picked}" into current branch`);
+			const mergeOut = execSync(`git merge "${picked}" --no-commit --no-ff --allow-unrelated-histories`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+			out?.appendLine(`[Swarm] merge stdout: ${(mergeOut || '').toString().trim()}`);
+
+			// "Already up to date." — git merge succeeded but did nothing.
+			// Skip the commit (a `git commit` on a clean tree throws
+			// "nothing to commit" and used to mis-classify into "Merge
+			// failed: unknown reason"). Just notify and return.
+			if (/already up to date/i.test(String(mergeOut))) {
+				vscode.window.showInformationMessage(`ℹ️ Already up to date — "${picked}" is already an ancestor of the current branch.`);
+				this.refresh();
+				return;
+			}
+
 			// Clean merge — commit it
 			execSync(`git commit -m "swarm merge: ${picked}" --no-verify`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 			vscode.window.showInformationMessage(`✅ Merged "${picked}" (clean)`);
@@ -375,18 +465,51 @@ export class SwarmProvider implements vscode.TreeDataProvider<SwarmNode> {
 				try { execSync(`git push origin "${branch}"`, { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }); } catch {}
 			}
 			this.refresh();
-		} catch {
-			// Auto-resolve non-content files before showing conflict UI
+		} catch (err: any) {
+			// Capture the raw git stderr first so the user can see what went
+			// wrong even if we mis-classify the failure below. The previous
+			// "Merge failed." toast hid the actual reason which made debugging
+			// merge attempts (Tom's BLT capture, Apr 2026) impossible.
+			const rawStderr = String(err?.stderr ?? err?.message ?? '').trim();
+			out?.appendLine(`[Swarm] merge failed (raw): ${rawStderr.slice(0, 500)}`);
+
+			// Auto-resolve non-content files (.soulscan/*, .age, soul.json,
+			// README.md) before showing conflict UI. This step intentionally
+			// only runs when the merge attempt produced index conflicts; if
+			// it failed for a non-conflict reason, the iteration finds
+			// nothing and is a no-op.
 			this.autoResolveNonContent(swarmDir, out);
+
+			// Re-read git status directly here (don't rely on stale
+			// detectSwarm() snapshot) so the conflict-check below sees the
+			// post-autoResolveNonContent state.
+			let postStatus = '';
+			try {
+				postStatus = execSync('git status --porcelain', { cwd: swarmDir, encoding: 'utf8' });
+				out?.appendLine(`[Swarm] post-merge status:\n${postStatus.trim() || '(empty — merge produced no index entries)'}`);
+			} catch (statusErr: any) {
+				out?.appendLine(`[Swarm] git status failed: ${statusErr?.message ?? statusErr}`);
+			}
+
+			const remainingConflicts = postStatus
+				.split('\n')
+				.filter(l => l.startsWith('UU') || l.startsWith('AA') || l.startsWith('DD'))
+				.map(l => l.slice(3).trim());
+
 			this.refresh();
-			if (this.hasConflicts) {
+
+			if (remainingConflicts.length > 0 || this.hasConflicts) {
+				this.hasConflicts = true;
+				this.conflictedFiles = remainingConflicts.length > 0 ? remainingConflicts : this.conflictedFiles;
 				this.mergeInProgress = true;
 				this.refresh();
 				await this.handleMergeConflicts(swarmDir, out);
 			} else {
-				// Merge failed for other reason
+				// Merge failed for a non-conflict reason — surface the actual
+				// git stderr to the user instead of a flat "Merge failed."
 				try { execSync('git merge --abort', { cwd: swarmDir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }); } catch {}
-				vscode.window.showErrorMessage('Merge failed.');
+				const reason = rawStderr.split('\n').find(l => l.length > 0)?.slice(0, 200) ?? 'unknown reason';
+				vscode.window.showErrorMessage(`Merge failed: ${reason}`);
 			}
 		}
 	}
